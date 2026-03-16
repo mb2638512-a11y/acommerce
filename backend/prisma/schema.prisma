@@ -1,0 +1,334 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum KYCStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ProductStatus {
+  ACTIVE
+  DRAFT
+  ARCHIVED
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PAID
+  PENDING
+  REFUNDED
+  FAILED
+}
+
+enum FulfillmentStatus {
+  UNFULFILLED
+  PARTIAL
+  FULFILLED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(USER)
+  avatar    String?
+  isVerified Boolean  @default(false)
+  kycStatus  KYCStatus @default(PENDING)
+  idDocumentUrl String?
+  paymentVerified Boolean @default(false)
+  stripeCustomerId String?
+  paypalPayerId String?
+  phone     String?
+  companyName String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stores    Store[]
+}
+
+model Store {
+  id          String   @id @default(uuid())
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id])
+  name        String
+  slug        String   @unique
+  description String?
+  themeColor  String?  @default("indigo")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  settings    Json?    // StoreSettings as JSON
+  
+  products    Product[]
+  orders      Order[]
+  customers   Customer[]
+  blogPosts   BlogPost[]
+  pages       Page[]
+  subscribers Subscriber[]
+  chatSessions ChatSession[]
+  discounts   DiscountCode[]
+  messages    Message[]
+  activityLog ActivityLog[]
+  carts       Cart[]
+}
+
+model Cart {
+  id        String   @id @default(uuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  userId    String?
+  email     String?
+  items     Json
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+model Product {
+  id          String        @id @default(uuid())
+  storeId     String
+  store       Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  category    String?
+  status      ProductStatus @default(ACTIVE)
+  price       Float
+  compareAtPrice Float?
+  costPerItem Float?
+  stock       Int           @default(0)
+  sku         String?
+  barcode     String?
+  trackQuantity Boolean     @default(true)
+  images      String[]
+  isFeatured  Boolean       @default(false)
+  isDigital   Boolean       @default(false)
+  variants    Json?         // ProductVariant[]
+  
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  reviews     Review[]
+  orderItems  OrderItem[]
+}
+
+model Order {
+  id          String      @id @default(uuid())
+  storeId     String
+  store       Store       @relation(fields: [storeId], references: [id])
+  customerId  String?
+  customer    Customer?   @relation(fields: [customerId], references: [id])
+  
+  // Snapshot of customer details at time of order
+  customerName String
+  customerEmail String
+  shippingAddress String?
+
+  subtotal    Float
+  tax         Float
+  shipping    Float
+  discount    Float
+  total       Float
+  
+  status      OrderStatus @default(PENDING)
+  paymentStatus PaymentStatus @default(PENDING)
+  fulfillmentStatus FulfillmentStatus @default(UNFULFILLED)
+  
+  items       OrderItem[]
+  timeline    Json?       // OrderTimelineEntry[]
+  date        DateTime    @default(now())
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+  
+  name      String  // Keep name in case product is deleted
+  price     Float
+  quantity  Int
+}
+
+model Customer {
+  id            String   @id @default(uuid())
+  storeId       String
+  store         Store    @relation(fields: [storeId], references: [id])
+  email         String
+  name          String
+  phone         String?
+  city          String?
+  country       String?
+  totalSpent    Float    @default(0)
+  ordersCount   Int      @default(0)
+  lastOrderDate DateTime?
+  notes         String?
+  tags          String[]
+  wishlist      String[] // Product IDs
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  orders        Order[]
+
+  @@unique([storeId, email])
+}
+
+model Review {
+  id          String   @id @default(uuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  rating      Int
+  comment     String?
+  customerName String
+  createdAt   DateTime @default(now())
+}
+
+model BlogPost {
+  id          String   @id @default(uuid())
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  title       String
+  slug        String
+  content     String
+  excerpt     String?
+  imageUrl    String?
+  author      String?
+  status      String   @default("DRAFT") // PUBLISHED, DRAFT
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Page {
+  id          String   @id @default(uuid())
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  title       String
+  slug        String
+  content     String
+  isVisible   Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+}
+
+model Subscriber {
+  id        String   @id @default(uuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id])
+  email     String
+  createdAt DateTime @default(now())
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id])
+  name      String
+  email     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model DiscountCode {
+  id        String   @id @default(uuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id])
+  code      String
+  type      String   // PERCENTAGE, FIXED
+  value     Float
+  usageCount Int     @default(0)
+  active    Boolean  @default(true)
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id])
+  action    String
+  details   String
+  createdAt DateTime @default(now())
+}
+
+model ChatSession {
+  id           String      @id @default(uuid())
+  storeId      String
+  store        Store       @relation(fields: [storeId], references: [id])
+  customerId   String
+  customerName String
+  messages     ChatMessage[]
+  lastMessage  String?
+  unreadAdmin  Int         @default(0)
+  unreadUser   Int         @default(0)
+  updatedAt    DateTime    @updatedAt
+}
+
+model ChatMessage {
+  id        String      @id @default(uuid())
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id])
+  sender    String      // user, admin
+  content   String
+  productId String?
+  createdAt DateTime    @default(now())
+}
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  parentId    String?
+  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryHierarchy")
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model GlobalSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model PlatformLog {
+  id          String   @id @default(uuid())
+  level       String   @default("INFO") // INFO, WARN, ERROR
+  message     String
+  source      String
+  details     Json?
+  timestamp   DateTime @default(now())
+}
+
+model ApiKey {
+  id          String   @id @default(uuid())
+  name        String
+  key         String   @unique
+  permissions String[]
+  lastUsed    DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+}

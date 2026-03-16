@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import api from '../lib/api';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth, db } from '../lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { User } from '../../types';
 
 interface AuthContextType {
     user: User | null;
-    login: (token: string, user: User) => void;
-    logout: () => void;
+    logout: () => Promise<void>;
     loading: boolean;
 }
 
@@ -16,29 +17,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        const storedUser = localStorage.getItem('user');
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            if (firebaseUser) {
+                try {
+                    const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+                    if (userDoc.exists()) {
+                        setUser(userDoc.data() as User);
+                    } else {
+                        setUser({
+                            id: firebaseUser.uid,
+                            email: firebaseUser.email || '',
+                            name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+                            role: 'user',
+                            joinedAt: Date.now()
+                        } as User);
+                    }
+                } catch (error) {
+                    console.error("AuthContext: Error fetching user doc:", error);
+                    setUser(null);
+                }
+            } else {
+                setUser(null);
+            }
+            setLoading(false);
+        });
 
-        if (token && storedUser) {
-            setUser(JSON.parse(storedUser));
-        }
-        setLoading(false);
+        return () => unsubscribe();
     }, []);
 
-    const login = (token: string, userData: User) => {
-        localStorage.setItem('token', token);
-        localStorage.setItem('user', JSON.stringify(userData));
-        setUser(userData);
-    };
-
-    const logout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        setUser(null);
+    const logout = async () => {
+        try {
+            await signOut(auth);
+            setUser(null);
+        } catch (error) {
+            console.error("AuthContext: Logout error:", error);
+        }
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, loading }}>
+        <AuthContext.Provider value={{ user, logout, loading }}>
             {children}
         </AuthContext.Provider>
     );

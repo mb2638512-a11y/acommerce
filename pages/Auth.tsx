@@ -5,7 +5,15 @@ import { ThemeToggle } from '../context/ThemeContext';
 import { useAuth } from '../src/context/AuthContext';
 import api from '../src/lib/api';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../src/lib/supabase';
+import { auth, db } from '../src/lib/firebase';
+import { 
+    signInWithEmailAndPassword, 
+    createUserWithEmailAndPassword, 
+    sendPasswordResetEmail,
+    signInWithPopup,
+    GoogleAuthProvider
+} from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { getPostLoginRoute } from '../src/lib/adminAccess';
 
 type AuthMode = 'signin' | 'signup' | 'forgot_password';
@@ -47,15 +55,14 @@ export const Auth: React.FC = () => {
     };
 
     const handleForgotPassword = async () => {
+        if (!email) return showToast("Email is required", "error");
         setLoading(true);
         try {
-            // In a real app, this would hit an actual endpoint: await api.post('/auth/forgot-password', { email });
-            // Simulating API call for now since backend doesn't have this yet
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            await sendPasswordResetEmail(auth, email);
             setRecoveryEmailSent(true);
             showToast("Password reset link sent to your email.", "success");
-        } catch (error) {
-            showToast("Failed to send reset link. Please try again.", "error");
+        } catch (error: any) {
+            showToast(error.message || "Failed to send reset link. Please try again.", "error");
         } finally {
             setLoading(false);
         }
@@ -64,15 +71,29 @@ export const Auth: React.FC = () => {
     const handleGoogleLogin = async () => {
         try {
             setLoading(true);
-            const { error } = await supabase.auth.signInWithOAuth({
-                provider: 'google',
-                options: {
-                    redirectTo: `${window.location.origin}/#/auth/callback`
-                }
-            });
-            if (error) throw error;
+            const provider = new GoogleAuthProvider();
+            const result = await signInWithPopup(auth, provider);
+            
+            // Check if user exists in Firestore, if not create
+            const userDoc = await getDoc(doc(db, 'users', result.user.uid));
+            if (!userDoc.exists()) {
+                await setDoc(doc(db, 'users', result.user.uid), {
+                    id: result.user.uid,
+                    email: result.user.email,
+                    name: result.user.displayName || result.user.email?.split('@')[0],
+                    role: 'user',
+                    joinedAt: Date.now(),
+                    isVerified: true,
+                    kycStatus: 'PENDING',
+                    paymentVerified: false
+                });
+            }
+            
+            showToast(`Welcome, ${result.user.displayName || 'User'}!`, 'success');
+            navigate('/dashboard');
         } catch (error: any) {
             showToast(error.message || 'Google Auth Error', 'error');
+        } finally {
             setLoading(false);
         }
     };
@@ -89,23 +110,39 @@ export const Auth: React.FC = () => {
 
         setLoading(true);
         try {
-            const endpoint = mode === 'signup' ? '/auth/register' : '/auth/login';
-            const payload = mode === 'signup'
-                ? { email, password, name: name.trim() }
-                : { email, password };
-
-            const res = await api.post(endpoint, payload);
-            login(res.data.token, res.data.user);
-            showToast(mode === 'signup' ? 'Account created successfully.' : `Welcome back, ${res.data.user.name}!`, "success");
-
-            if (res.data.user.isVerified === false) {
+            if (mode === 'signup') {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+                
+                // Create user profile in Firestore
+                const userData = {
+                    id: user.uid,
+                    email,
+                    name: name.trim(),
+                    role: 'user',
+                    joinedAt: Date.now(),
+                    isVerified: false,
+                    kycStatus: 'PENDING',
+                    paymentVerified: false
+                };
+                await setDoc(doc(db, 'users', user.uid), userData);
+                
+                showToast('Account created successfully.', "success");
                 navigate('/verify');
             } else {
-                navigate(getPostLoginRoute(res.data.user));
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+                const userData = userDoc.data();
+                
+                showToast(`Welcome back!`, "success");
+                if (userData?.isVerified === false) {
+                    navigate('/verify');
+                } else {
+                    navigate(getPostLoginRoute(userData as any));
+                }
             }
         } catch (error: any) {
-            const apiMessage = error?.response?.data?.error;
-            showToast(apiMessage || (mode === 'signup' ? 'Registration failed.' : 'Invalid credentials.'), "error");
+            showToast(error.message || (mode === 'signup' ? 'Registration failed.' : 'Invalid credentials.'), "error");
         } finally {
             setLoading(false);
         }

@@ -18,6 +18,7 @@ import cartRoutes from './routes/cartRoutes';
 import billingRoutes from './routes/billingRoutes';
 import autoPilotRoutes from './routes/autoPilotRoutes';
 import categoryRoutes from './routes/categoryRoutes';
+import searchRoutes from './routes/searchRoutes';
 
 import prisma from './utils/prisma';
 import { env, isProduction } from './config/env';
@@ -65,6 +66,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/ai', rateLimit({ keyPrefix: 'ai', max: 60, windowMs: 60 * 1000 }), aiRoutes);
 app.use('/api/autopilot', autoPilotRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/search', searchRoutes);
 
 
 app.get('/', (req, res) => {

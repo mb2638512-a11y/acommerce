@@ -40,6 +40,7 @@ const verifyPaymentSchema = z.object({
 const googleAuthSchema = z.object({
     email: z.string().email(),
     name: z.string().min(2),
+    avatar: z.string().url().optional(),
 });
 
 const formatUserResponse = (user: any) => ({
@@ -52,6 +53,7 @@ const formatUserResponse = (user: any) => ({
     paymentVerified: user.paymentVerified || false,
     stripeCustomerId: user.stripeCustomerId,
     paypalPayerId: user.paypalPayerId,
+    avatar: user.avatar,
     joinedAt: user.createdAt.getTime()
 });
 
@@ -61,7 +63,7 @@ export const register = async (req: Request, res: Response) => {
         const normalizedEmail = email.trim().toLowerCase();
 
         const existingUser = await prisma.user.findFirst({
-            where: { email: { equals: normalizedEmail, mode: 'insensitive' } }
+            where: { email: { equals: normalizedEmail } }
         });
         if (existingUser) {
             return res.status(400).json({ error: 'User already exists' });
@@ -75,6 +77,7 @@ export const register = async (req: Request, res: Response) => {
         const token = generateToken(user.id, user.role);
         res.json({ token, user: formatUserResponse(user) });
     } catch (error) {
+        console.error('Register error:', error);
         if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
         res.status(500).json({ error: 'Server error' });
     }
@@ -86,7 +89,7 @@ export const login = async (req: Request, res: Response) => {
         const normalizedEmail = email.trim().toLowerCase();
 
         const user = await prisma.user.findFirst({
-            where: { email: { equals: normalizedEmail, mode: 'insensitive' } }
+            where: { email: { equals: normalizedEmail } }
         });
         if (!user || !(await bcrypt.compare(password, user.password))) {
             return res.status(401).json({ error: 'Invalid credentials' });
@@ -95,6 +98,7 @@ export const login = async (req: Request, res: Response) => {
         const token = generateToken(user.id, user.role);
         res.json({ token, user: formatUserResponse(user) });
     } catch (error) {
+        console.error('Login error:', error);
         if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
         res.status(500).json({ error: 'Server error' });
     }
@@ -143,13 +147,29 @@ export const googleAuth = async (req: Request, res: Response) => {
         const normalizedEmail = email.trim().toLowerCase();
 
         let user = await prisma.user.findFirst({
-            where: { email: { equals: normalizedEmail, mode: 'insensitive' } }
+            where: { email: { equals: normalizedEmail } }
         });
 
         if (!user) {
             const hashedPassword = await bcrypt.hash(Math.random().toString(36).slice(-10) + 'Aa1!', 10);
             user = await prisma.user.create({
-                data: { email: normalizedEmail, password: hashedPassword, name, isVerified: false }
+                data: { 
+                    email: normalizedEmail, 
+                    password: hashedPassword, 
+                    name, 
+                    avatar: req.body.avatar,
+                    isVerified: true 
+                }
+            });
+        } else {
+            // Sync/Update existing user data from Google
+            user = await prisma.user.update({
+                where: { id: user.id },
+                data: { 
+                    name, 
+                    avatar: req.body.avatar || user.avatar,
+                    isVerified: true 
+                }
             });
         }
 

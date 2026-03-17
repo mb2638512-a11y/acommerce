@@ -15,6 +15,12 @@ export const AuthCallback: React.FC = () => {
  useEffect(() => {
   const handleAuth = async () => {
    try {
+    if (!supabase) {
+     showToast('Supabase is not configured. Cannot complete OAuth callback.', 'error');
+     navigate('/login');
+     return;
+    }
+
     // Supabase puts the session in the URL hash, getSession parses it automatically
     const { data: { session }, error } = await supabase.auth.getSession();
 

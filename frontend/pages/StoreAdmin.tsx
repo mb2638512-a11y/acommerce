@@ -12,8 +12,12 @@ import {
     Mail, Megaphone, TrendingUp, DollarSign, Menu, X, Tag, Printer, Download, Lock, Unlock,
     HelpCircle, BookOpen, Clock, AlertTriangle, PenTool, CheckSquare, Square, Inbox, Share2, Copy, QrCode,
     Filter, ChevronDown, ChevronRight, Edit2, Send, MessageSquare, ExternalLink, Save, Instagram, FileText, Eye, Upload, Calendar, Globe, Box, Archive, Map, Printer as PrintIcon, MoreHorizontal, User, BarChart2, Star, Award,
-    Facebook, Twitter, Zap, Brain, Activity, Rocket
+    Facebook, Twitter, Zap, Brain, Activity, Rocket,
+    Store as StoreIcon
 } from 'lucide-react';
+import { StoreSwitcher } from '../components/StoreSwitcher';
+import { StoreCreationWizard } from '../components/StoreCreationWizard';
+import { PlanTier } from '../types';
 
 interface StoreAdminProps {
     storeId: string;
@@ -49,7 +53,7 @@ const SalesChart: React.FC<{ data: number[] }> = ({ data }) => {
 
 export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) => {
     // Removed useState for store to rely on useQuery
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'orders' | 'customers' | 'marketing' | 'settings' | 'discounts' | 'blog' | 'inbox' | 'pages' | 'abandoned' | 'staff' | 'reviews'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'orders' | 'customers' | 'marketing' | 'settings' | 'discounts' | 'blog' | 'inbox' | 'pages' | 'abandoned' | 'staff' | 'reviews' | 'autopilot'>('dashboard');
     const [inboxTab, setInboxTab] = useState<'messages' | 'chat'>('chat');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
@@ -95,6 +99,22 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
     const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
     const [adminChatInput, setAdminChatInput] = useState('');
 
+    // Advanced AI Features State
+    const [aiSentimentInput, setAiSentimentInput] = useState('');
+    const [aiSentimentResult, setAiSentimentResult] = useState<any>(null);
+    const [isAnalyzingSentiment, setIsAnalyzingSentiment] = useState(false);
+    
+    const [aiTranslateText, setAiTranslateText] = useState('');
+    const [aiTargetLang, setAiTargetLang] = useState('Spanish');
+    const [aiTranslateResult, setAiTranslateResult] = useState('');
+    const [isTranslating, setIsTranslating] = useState(false);
+    
+    const [aiSegmentationResult, setAiSegmentationResult] = useState<any>(null);
+    const [isSegmenting, setIsSegmenting] = useState(false);
+    
+    const [aiRecommendationResult, setAiRecommendationResult] = useState<any>(null);
+    const [isGeneratingRecs, setIsGeneratingRecs] = useState(false);
+
     // Pages State
     const [pageViewMode, setPageViewMode] = useState<'list' | 'edit'>('list');
     const [editingPageId, setEditingPageId] = useState<string | null>(null);
@@ -106,6 +126,9 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
     // Order Details Modal
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
     const [orderSearch, setOrderSearch] = useState('');
+
+    // Multi-store Management
+    const [isWizardOpen, setIsWizardOpen] = useState(false);
 
 
     // Filter State
@@ -139,6 +162,15 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
         queryFn: async () => {
             const res = await api.get(`/cart/${storeId}/abandoned`);
             return res.data as any[];
+        },
+        enabled: !!user
+    });
+
+    const { data: myStores = [] } = useQuery({
+        queryKey: ['myStores', user?.id],
+        queryFn: async () => {
+            const res = await api.get<Store[]>('/stores/my/all');
+            return res.data;
         },
         enabled: !!user
     });
@@ -459,10 +491,15 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
 
     // --- Blog Mutations ---
     const createBlogMutation = useMutation({
-        mutationFn: async () => {
-            throw new Error('Blog API not available');
+        mutationFn: async (data: any) => {
+            const res = await api.post(`/stores/${storeId}/blog`, data);
+            return res.data;
         },
-        onError: () => showToast('Blog API not ready', 'info')
+        onSuccess: () => {
+            showToast('Blog post created', 'success');
+            loadStore();
+        },
+        onError: () => showToast('Failed to create blog post', 'error')
     });
 
 
@@ -470,9 +507,14 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
 
     const updateBlogMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string, data: any }) => {
-            throw new Error('Blog API not available');
+            const res = await api.patch(`/stores/${storeId}/blog/${id}`, data);
+            return res.data;
         },
-        onError: () => showToast('Blog API not ready', 'info')
+        onSuccess: () => {
+            showToast('Blog post updated', 'success');
+            loadStore();
+        },
+        onError: () => showToast('Failed to update blog post', 'error')
     });
 
     const deleteBlogMutation = useMutation({
@@ -554,6 +596,67 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
         setAdminChatInput('');
     };
 
+    // --- Advanced AI Handlers ---
+    const handleAnalyzeSentiment = async () => {
+        if (!aiSentimentInput) return;
+        setIsAnalyzingSentiment(true);
+        try {
+            const res = await api.post('/ai/sentiment', { content: aiSentimentInput });
+            setAiSentimentResult(res.data);
+            showToast('Sentiment analysis complete', 'success');
+        } catch (error) {
+            showToast('Analysis failed', 'error');
+        } finally {
+            setIsAnalyzingSentiment(false);
+        }
+    };
+
+    const handleTranslate = async () => {
+        if (!aiTranslateText) return;
+        setIsTranslating(true);
+        try {
+            const res = await api.post('/ai/translate', { 
+                text: aiTranslateText, 
+                targetLanguage: aiTargetLang 
+            });
+            setAiTranslateResult(res.data.translatedText);
+            showToast('Translation complete', 'success');
+        } catch (error) {
+            showToast('Translation failed', 'error');
+        } finally {
+            setIsTranslating(false);
+        }
+    };
+
+    const handleSegmentCustomers = async () => {
+        setIsSegmenting(true);
+        try {
+            const res = await api.post('/ai/segmentation', { storeId });
+            setAiSegmentationResult(res.data);
+            showToast('Customer segmentation complete', 'success');
+        } catch (error) {
+            showToast('Segmentation failed', 'error');
+        } finally {
+            setIsSegmenting(false);
+        }
+    };
+
+    const handleGetRecommendations = async () => {
+        setIsGeneratingRecs(true);
+        try {
+            const res = await api.post('/ai/recommendations', { 
+                categories: Array.from(new Set(store.products.map(p => p.category))),
+                limit: 5
+            });
+            setAiRecommendationResult(res.data);
+            showToast('Recommendations generated', 'success');
+        } catch (error) {
+            showToast('Failed to generate recommendations', 'error');
+        } finally {
+            setIsGeneratingRecs(false);
+        }
+    };
+
     const handleSaveSettings = (updates: Partial<typeof store.settings>) => {
         updateStoreMutation.mutate({ settings: { ...store.settings, ...updates } });
     };
@@ -576,24 +679,19 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
             {/* Sidebar */}
             <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transform transition-transform duration-300 lg:relative lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col`}>
                 <div className="p-6 border-b border-gray-100 dark:border-gray-800">
-                    <div className="flex justify-between items-center mb-4">
-                        <button onClick={() => onNavigate('/')} className="flex items-center gap-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors text-sm font-bold">
-                            <ArrowLeft size={16} /> Back
+                    <div className="flex justify-between items-center mb-6">
+                        <button onClick={() => onNavigate('/')} className="flex items-center gap-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors text-xs font-black uppercase tracking-widest">
+                            <ArrowLeft size={14} /> Hub
                         </button>
                         <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden text-gray-500"><X size={20} /></button>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-lg bg-${store.themeColor}-600 flex items-center justify-center text-white font-bold shadow-lg shadow-${store.themeColor}-500/30`}>
-                            {store.name.charAt(0)}
-                        </div>
-                        <div className="flex-1 overflow-hidden">
-                            <h2 className="font-bold text-gray-900 dark:text-white truncate">{store.name}</h2>
-                            <div className="flex items-center gap-1.5">
-                                <span className={`w-2 h-2 rounded-full ${store.settings.maintenanceMode ? 'bg-orange-500' : 'bg-green-500'}`}></span>
-                                <span className="text-xs text-gray-500 font-medium">{store.settings.maintenanceMode ? 'Maintenance' : 'Online'}</span>
-                            </div>
-                        </div>
-                    </div>
+                    
+                    <StoreSwitcher 
+                        stores={myStores}
+                        activeStoreId={storeId}
+                        onSelect={(id) => onNavigate(`/store/${id}/admin`)}
+                        onCreateNew={() => setIsWizardOpen(true)}
+                    />
                 </div>
 
                 <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
@@ -1584,91 +1682,178 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
                                 </div>
                             </div>
 
-                            {/* Auto Pilot Features Grid */}
-                            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                                <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-                                    <Activity className="text-blue-500" size={20} /> Automation Controls
-                                </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {/* Core Auto Pilot */}
-                                    <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="font-bold text-sm">AI Dashboard</span>
-                                            <div className="w-8 h-4 bg-green-500 rounded-full relative"><div className="absolute right-0.5 top-0.5 w-3 h-3 bg-white rounded-full"></div></div>
+                            {/* Smart AI Tools Grid */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* Sentiment Analysis Tool */}
+                                <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex flex-col">
+                                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                                        <Activity className="text-blue-500" size={20} /> Sentiment Analyzer
+                                    </h3>
+                                    <textarea
+                                        className="flex-1 min-h-[100px] p-3 border border-gray-200 dark:border-gray-700 rounded-xl bg-transparent mb-4 text-sm"
+                                        placeholder="Paste customer feedback or reviews to analyze sentiment..."
+                                        value={aiSentimentInput}
+                                        onChange={e => setAiSentimentInput(e.target.value)}
+                                    />
+                                    <button
+                                        onClick={handleAnalyzeSentiment}
+                                        disabled={isAnalyzingSentiment || !aiSentimentInput}
+                                        className="w-full py-2 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {isAnalyzingSentiment ? <Loader2 className="animate-spin" size={16} /> : <Zap size={16} />}
+                                        Analyze Sentiment
+                                    </button>
+                                    {aiSentimentResult && (
+                                        <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${
+                                                    aiSentimentResult.sentiment === 'positive' ? 'bg-green-100 text-green-700' :
+                                                    aiSentimentResult.sentiment === 'negative' ? 'bg-red-100 text-red-700' : 'bg-gray-200 text-gray-700'
+                                                }`}>
+                                                    {aiSentimentResult.sentiment}
+                                                </span>
+                                                <span className="text-xs font-bold text-gray-500">Score: {aiSentimentResult.score}</span>
+                                            </div>
+                                            <p className="text-sm text-gray-700 dark:text-gray-300 italic">"{aiSentimentResult.summary}"</p>
                                         </div>
-                                        <p className="text-xs text-gray-500">Real-time AI insights</p>
+                                    )}
+                                </div>
+
+                                {/* Content Translator Tool */}
+                                <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex flex-col">
+                                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                                        <Globe className="text-purple-500" size={20} /> AI Content Translator
+                                    </h3>
+                                    <textarea
+                                        className="flex-1 min-h-[100px] p-3 border border-gray-200 dark:border-gray-700 rounded-xl bg-transparent mb-4 text-sm"
+                                        placeholder="Enter product description or marketing copy to translate..."
+                                        value={aiTranslateText}
+                                        onChange={e => setAiTranslateText(e.target.value)}
+                                    />
+                                    <div className="flex gap-2">
+                                        <select
+                                            className="p-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-sm font-bold"
+                                            value={aiTargetLang}
+                                            onChange={e => setAiTargetLang(e.target.value)}
+                                        >
+                                            <option value="Spanish">Spanish</option>
+                                            <option value="French">French</option>
+                                            <option value="German">German</option>
+                                            <option value="Chinese">Chinese</option>
+                                            <option value="Japanese">Japanese</option>
+                                            <option value="Arabic">Arabic</option>
+                                        </select>
+                                        <button
+                                            onClick={handleTranslate}
+                                            disabled={isTranslating || !aiTranslateText}
+                                            className="flex-1 py-2 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                                        >
+                                            {isTranslating ? <Loader2 className="animate-spin" size={16} /> : <Rocket size={16} />}
+                                            Translate Now
+                                        </button>
                                     </div>
-                                    <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="font-bold text-sm">Smart Suggestions</span>
-                                            <div className="w-8 h-4 bg-green-500 rounded-full relative"><div className="absolute right-0.5 top-0.5 w-3 h-3 bg-white rounded-full"></div></div>
+                                    {aiTranslateResult && (
+                                        <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
+                                            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{aiTranslateResult}</p>
+                                            <button 
+                                                onClick={() => { navigator.clipboard.writeText(aiTranslateResult); showToast('Copied to clipboard', 'success'); }}
+                                                className="mt-2 text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                                            >
+                                                <Copy size={12} /> Copy Result
+                                            </button>
                                         </div>
-                                        <p className="text-xs text-gray-500">AI-powered recommendations</p>
-                                    </div>
-                                    <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="font-bold text-sm">Predictive Insights</span>
-                                            <div className="w-8 h-4 bg-green-500 rounded-full relative"><div className="absolute right-0.5 top-0.5 w-3 h-3 bg-white rounded-full"></div></div>
-                                        </div>
-                                        <p className="text-xs text-gray-500">Forecast trends</p>
-                                    </div>
-                                    <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="font-bold text-sm">Auto Inventory</span>
-                                            <div className="w-8 h-4 bg-green-500 rounded-full relative"><div className="absolute right-0.5 top-0.5 w-3 h-3 bg-white rounded-full"></div></div>
-                                        </div>
-                                        <p className="text-xs text-gray-500">AI manages stock levels</p>
-                                    </div>
-                                    <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="font-bold text-sm">Auto Pricing</span>
-                                            <div className="w-8 h-4 bg-green-500 rounded-full relative"><div className="absolute right-0.5 top-0.5 w-3 h-3 bg-white rounded-full"></div></div>
-                                        </div>
-                                        <p className="text-xs text-gray-500">Dynamic pricing optimization</p>
-                                    </div>
-                                    <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="font-bold text-sm">Auto Orders</span>
-                                            <div className="w-8 h-4 bg-green-500 rounded-full relative"><div className="absolute right-0.5 top-0.5 w-3 h-3 bg-white rounded-full"></div></div>
-                                        </div>
-                                        <p className="text-xs text-gray-500">Automated order processing</p>
-                                    </div>
-                                    <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="font-bold text-sm">Daily Briefing</span>
-                                            <div className="w-8 h-4 bg-green-500 rounded-full relative"><div className="absolute right-0.5 top-0.5 w-3 h-3 bg-white rounded-full"></div></div>
-                                        </div>
-                                        <p className="text-xs text-gray-500">AI daily summary</p>
-                                    </div>
-                                    <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="font-bold text-sm">Trend Analysis</span>
-                                            <div className="w-8 h-4 bg-green-500 rounded-full relative"><div className="absolute right-0.5 top-0.5 w-3 h-3 bg-white rounded-full"></div></div>
-                                        </div>
-                                        <p className="text-xs text-gray-500">Market trend detection</p>
-                                    </div>
-                                    <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="font-bold text-sm">Customer Support</span>
-                                            <div className="w-8 h-4 bg-gray-300 dark:bg-gray-600 rounded-full relative"><div className="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full"></div></div>
-                                        </div>
-                                        <p className="text-xs text-gray-500">AI auto-responses</p>
-                                    </div>
+                                    )}
                                 </div>
                             </div>
 
-                            {/* Natural Language Query */}
-                            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                                <h3 className="font-bold text-lg mb-4">Ask AI Anything</h3>
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        placeholder="Ask about orders, revenue, products..."
-                                        className="flex-1 p-3 border border-gray-200 dark:border-gray-700 rounded-xl bg-transparent"
-                                    />
-                                    <button className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 flex items-center gap-2">
-                                        <Sparkles size={18} /> Ask AI
-                                    </button>
+                            {/* Segmentation & Recommendations */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* Audience Segmentation */}
+                                <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h3 className="font-bold text-lg flex items-center gap-2">
+                                            <Users className="text-orange-500" size={20} /> Audience Segmentation
+                                        </h3>
+                                        <button
+                                            onClick={handleSegmentCustomers}
+                                            disabled={isSegmenting}
+                                            className="px-4 py-2 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-orange-200 transition-colors"
+                                        >
+                                            {isSegmenting ? <Loader2 className="animate-spin" size={16} /> : <Activity size={16} />}
+                                            {aiSegmentationResult ? 'Refresh Segments' : 'Analyze Audience'}
+                                        </button>
+                                    </div>
+
+                                    {aiSegmentationResult ? (
+                                        <div className="space-y-4">
+                                            {aiSegmentationResult.segments.map((segment: any, i: number) => (
+                                                <div key={ segment.name } className="p-4 border border-gray-100 dark:border-gray-800 rounded-2xl bg-gray-50 dark:bg-gray-800/50">
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <h4 className="font-bold text-gray-900 dark:text-white">{segment.name}</h4>
+                                                        <span className="text-xs font-bold px-2 py-0.5 bg-white dark:bg-gray-700 rounded-full border border-gray-200 dark:border-gray-600">{segment.size} customers</span>
+                                                    </div>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{segment.description}</p>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {segment.traits.map((trait: string) => (
+                                                            <span key={trait} className="text-[10px] bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full font-bold">{trait}</span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <div className="mt-4 p-4 bg-orange-50 dark:bg-orange-900/20 rounded-xl border border-orange-100 dark:border-orange-800">
+                                                <p className="text-xs text-orange-800 dark:text-orange-300 font-medium">
+                                                    <strong>AI Insight:</strong> {aiSegmentationResult.marketing_insight}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="h-40 flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-2xl">
+                                            <Users size={32} className="mb-2 opacity-50" />
+                                            <p className="text-sm">Run analysis to identify customer profiles</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Smart Product Recommendations */}
+                                <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h3 className="font-bold text-lg flex items-center gap-2">
+                                            <Sparkles className="text-yellow-500" size={20} /> Smart Recommendations
+                                        </h3>
+                                        <button
+                                            onClick={handleGetRecommendations}
+                                            disabled={isGeneratingRecs}
+                                            className="px-4 py-2 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-yellow-200 transition-colors"
+                                        >
+                                            {isGeneratingRecs ? <Loader2 className="animate-spin" size={16} /> : <Zap size={16} />}
+                                            {aiRecommendationResult ? 'Update Recs' : 'Get Predictions'}
+                                        </button>
+                                    </div>
+
+                                    {aiRecommendationResult ? (
+                                        <div className="space-y-4">
+                                            {aiRecommendationResult.recommendedProducts?.map((product: any) => (
+                                                <div key={product.id} className="flex items-center gap-4 p-3 border border-gray-100 dark:border-gray-800 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                                                    <img src={product.imageUrl} className="w-12 h-12 rounded-xl object-cover" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <h4 className="font-bold text-sm truncate">{product.name}</h4>
+                                                        <p className="text-xs text-indigo-600 font-bold">${product.price}</p>
+                                                    </div>
+                                                    <button className="p-2 text-gray-400 hover:text-indigo-600 transition-colors"><ExternalLink size={16} /></button>
+                                                </div>
+                                            ))}
+                                            <div className="mt-4 p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800">
+                                                <p className="text-xs text-indigo-800 dark:text-indigo-300 font-medium italic">
+                                                    "{aiRecommendationResult.insight}"
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="h-40 flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-2xl">
+                                            <Sparkles size={32} className="mb-2 opacity-50" />
+                                            <p className="text-sm">Get AI predictions on high-performing products</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -2025,6 +2210,11 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
                         </div>
                     )}
 
+                    {/* Premium Store Creation Wizard */}
+                    <StoreCreationWizard 
+                        isOpen={isWizardOpen} 
+                        onClose={() => setIsWizardOpen(false)} 
+                    />
                 </div>
             </main>
         </div>

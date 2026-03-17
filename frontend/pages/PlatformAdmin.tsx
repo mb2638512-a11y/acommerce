@@ -190,7 +190,8 @@ type AdminTab =
   | 'orders'
   | 'products'
   | 'system'
-  | 'features';
+  | 'features'
+  | 'moderation';
 
 interface PremiumControl {
   id: string;
@@ -349,9 +350,9 @@ const AdminAreaChart: React.FC<{ data: RevenuePoint[] }> = ({ data }) => {
           contentStyle={{
             backgroundColor: 'rgba(3, 7, 18, 0.9)',
             border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: 12
+            borderRadius: '12px'
           }}
-          formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
+          formatter={(value: any) => [`$${Number(value).toLocaleString()}`, 'Revenue']}
         />
         <Area type="monotone" dataKey="revenue" stroke="#38bdf8" strokeWidth={3} fill="url(#adminRevenueFill)" />
       </AreaChart>
@@ -499,6 +500,37 @@ export const PlatformAdmin: React.FC<PlatformAdminProps> = ({ onNavigate, onLogo
       return res.data;
     },
     enabled: !!user
+  });
+
+  const { data: moderationFlags = [], isLoading: isModerationLoading, refetch: refetchModeration } = useQuery({
+    queryKey: ['moderationFlags'],
+    queryFn: async () => {
+      const res = await api.get<any[]>('/moderation/flags?status=PENDING');
+      return res.data;
+    },
+    enabled: !!user && activeTab === 'moderation'
+  });
+
+  const approveProductMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await api.put(`/moderation/approve/${id}`, { note: 'Approved by admin' });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['moderationFlags'] });
+      queryClient.invalidateQueries({ queryKey: ['adminProducts'] });
+      showToast({ title: 'Success', description: 'Product approved' });
+    }
+  });
+
+  const rejectProductMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await api.put(`/moderation/reject/${id}`, { note: 'Rejected by admin' });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['moderationFlags'] });
+      queryClient.invalidateQueries({ queryKey: ['adminProducts'] });
+      showToast({ title: 'Success', description: 'Product rejected and archived' });
+    }
   });
 
   const { data: allProducts = [], isLoading: isProductsLoading, isError: isProductsError } = useQuery({
@@ -816,7 +848,8 @@ export const PlatformAdmin: React.FC<PlatformAdminProps> = ({ onNavigate, onLogo
     { id: 'products', label: 'Products', icon: Package },
     { id: 'system', label: 'System', icon: Server },
     { id: 'features', label: 'Premium Features', icon: Sparkles },
-    { id: 'autopilot', label: 'Auto Pilot', icon: Rocket }
+    { id: 'autopilot', label: 'Auto Pilot', icon: Rocket },
+    { id: 'moderation', label: 'Content Guard', icon: Shield }
   ] as const;
 
   return (
@@ -1994,6 +2027,89 @@ export const PlatformAdmin: React.FC<PlatformAdminProps> = ({ onNavigate, onLogo
                     <div className="mt-2 text-xs text-green-400">AI Optimized</div>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'moderation' && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-black flex items-center gap-2">
+                    <Shield className="text-rose-400" /> Content Guard
+                  </h2>
+                  <p className="text-gray-900 dark:text-gray-500 dark:text-white/60 mt-1">
+                    Manage flagged products and ethical compliance violations
+                  </p>
+                </div>
+                <div className="bg-rose-500/10 border border-rose-500/20 px-4 py-2 rounded-xl">
+                  <span className="text-rose-300 font-bold text-sm">{moderationFlags.length} Pending Flags</span>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-[#0f111a]/50 border border-gray-200 dark:border-white/10 rounded-2xl overflow-hidden">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-100 dark:bg-white/5 border-b border-gray-200 dark:border-white/10 text-gray-900 dark:text-gray-500 dark:text-white/50 uppercase tracking-wider font-bold text-xs">
+                    <tr>
+                      <th className="px-6 py-4">Product Details</th>
+                      <th className="px-6 py-4">Store</th>
+                      <th className="px-6 py-4">Violation Details</th>
+                      <th className="px-6 py-4">Confidence</th>
+                      <th className="px-6 py-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10">
+                    {moderationFlags.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-12 text-center text-gray-900 dark:text-white/30 italic">
+                          No pending moderation flags. Platform is clean.
+                        </td>
+                      </tr>
+                    ) : (
+                      moderationFlags.map((flag: any) => (
+                        <tr key={flag.id} className="hover:bg-gray-100 dark:bg-white/5">
+                          <td className="px-6 py-4">
+                            <p className="font-bold">{flag.productName}</p>
+                            <p className="text-xs text-gray-900 dark:text-gray-500 dark:text-white/40">{flag.productCategory || 'Uncategorized'}</p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="font-medium">{flag.store?.name || 'Unknown Store'}</p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="bg-rose-500/10 text-rose-300 text-[11px] px-2 py-1 rounded-md font-bold uppercase">
+                              {flag.category}
+                            </span>
+                            <p className="text-xs text-rose-300/70 mt-1">
+                              {Array.isArray(JSON.parse(flag.flags)) ? JSON.parse(flag.flags).join(', ') : 'Policy violation detected'}
+                            </p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                                <div className="h-full bg-rose-500" style={{ width: `${flag.confidence * 100}%` }}></div>
+                              </div>
+                              <span className="text-xs font-bold">{(flag.confidence * 100).toFixed(0)}%</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-right space-x-2">
+                            <button
+                              onClick={() => approveProductMutation.mutate(flag.id)}
+                              className="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 text-xs font-bold"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => rejectProductMutation.mutate(flag.id)}
+                              className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-xs font-bold"
+                            >
+                              Reject
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}

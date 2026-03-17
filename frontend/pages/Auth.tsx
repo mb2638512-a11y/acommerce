@@ -20,6 +20,31 @@ import { User } from '../types';
 
 type AuthMode = 'signin' | 'signup' | 'forgot_password';
 
+const InputField: React.FC<any> = ({ icon: Icon, type, value, onChange, label, autoFocus = false, extraProps = {} }) => {
+    const [focused, setFocused] = useState(false);
+    const isFilled = value && value.length > 0;
+    const active = focused || isFilled;
+
+    return (
+        <div className="relative group/input mt-6">
+            <div className={`absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-2xl blur opacity-0 group-focus-within/input:opacity-50 transition duration-500 ${extraProps.disabled ? 'hidden' : ''}`}></div>
+            <div className={`relative flex items-center bg-white dark:bg-black/40 border rounded-2xl transition-all duration-300 ${extraProps.disabled ? 'border-gray-100 dark:border-white/5 opacity-60 bg-gray-50 dark:bg-white/5' : 'border-gray-200 dark:border-white/10 focus-within:border-indigo-500'}`}>
+                <Icon className={`absolute left-4 transition-colors duration-300 ${focused ? 'text-indigo-500' : 'text-gray-400'}`} size={20} />
+                <label className={`absolute left-12 transition-all duration-300 pointer-events-none ${active ? '-top-3 text-[10px] font-bold tracking-wider uppercase px-2 bg-white dark:bg-[#0a0f1d] text-indigo-500 dark:text-indigo-400 rounded-full' : 'top-4 text-sm text-gray-400'}`}>
+                    {label}
+                </label>
+                <input
+                    type={type} required autoFocus={autoFocus} value={value} onChange={onChange}
+                    onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+                    className={`w-full pl-12 pr-4 py-4 bg-transparent border-none outline-none text-slate-900 dark:text-white placeholder-transparent text-sm ${extraProps.disabled ? 'cursor-not-allowed text-gray-400' : ''}`}
+                    placeholder={label}
+                    {...extraProps}
+                />
+            </div>
+        </div>
+    );
+};
+
 export const Auth: React.FC = () => {
     const [mode, setMode] = useState<AuthMode>('signin');
     const [step, setStep] = useState<1 | 2>(1); // Step 1: Email, Step 2: Password/Details
@@ -202,30 +227,6 @@ export const Auth: React.FC = () => {
         setRecoveryEmailSent(false);
     };
 
-    const InputField = ({ icon: Icon, type, value, onChange, label, autoFocus = false, extraProps = {} }: any) => {
-        const [focused, setFocused] = useState(false);
-        const isFilled = value.length > 0;
-        const active = focused || isFilled;
-
-        return (
-            <div className="relative group/input mt-6">
-                <div className={`absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-2xl blur opacity-0 group-focus-within/input:opacity-50 transition duration-500 ${extraProps.disabled ? 'hidden' : ''}`}></div>
-                <div className={`relative flex items-center bg-white dark:bg-black/40 border rounded-2xl transition-all duration-300 ${extraProps.disabled ? 'border-gray-100 dark:border-white/5 opacity-60 bg-gray-50 dark:bg-white/5' : 'border-gray-200 dark:border-white/10 focus-within:border-indigo-500'}`}>
-                    <Icon className={`absolute left-4 transition-colors duration-300 ${focused ? 'text-indigo-500' : 'text-gray-400'}`} size={20} />
-                    <label className={`absolute left-12 transition-all duration-300 pointer-events-none ${active ? '-top-3 text-[10px] font-bold tracking-wider uppercase px-2 bg-white dark:bg-[#0a0f1d] text-indigo-500 dark:text-indigo-400 rounded-full' : 'top-4 text-sm text-gray-400'}`}>
-                        {label}
-                    </label>
-                    <input
-                        type={type} required autoFocus={autoFocus} value={value} onChange={onChange}
-                        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-                        className={`w-full pl-12 pr-4 py-4 bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-transparent text-sm ${extraProps.disabled ? 'cursor-not-allowed text-gray-400' : ''}`}
-                        placeholder={label}
-                        {...extraProps}
-                    />
-                </div>
-            </div>
-        );
-    };
 
     // Calculate password strength indicator (Simple example)
     const getPwdStrength = () => {
@@ -383,7 +384,7 @@ export const Auth: React.FC = () => {
                                         </div>
 
                                         {mode === 'signup' && (
-                                            <InputField icon={UserIcon} type="text" label="Full Enterprise Name" value={name} onChange={(e: any) => setName(e.target.value)} autoFocus />
+                                            <InputField icon={UserIcon} type="text" label="Full Enterprise Name" value={name} onChange={(e: any) => setName(e.target.value)} />
                                         )}
 
                                         <div className="relative group/pass">

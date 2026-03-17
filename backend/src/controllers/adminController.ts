@@ -1,17 +1,26 @@
 import { Request, Response } from 'express';
-import { Prisma, Role } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import prisma from '../utils/prisma';
-import { toApiRole } from '../utils/role';
+import { toApiRole, Role } from '../utils/role';
 import { DEFAULT_PLAN_TIER, PLAN_TIERS } from '../config/platformPlans';
-import { getStorePlanTier } from '../utils/storePlan';
-import { withUpdatedPlanSettings } from '../utils/storePlan';
+import { getStorePlanTier, withUpdatedPlanSettings } from '../utils/storePlan';
 
-const toDbRole = (role: Role): Role => (role === 'ADMIN' ? 'USER' : 'ADMIN');
+// toDbRole is now a string-based role mapper
+const toDbRole = (role: string): Role => (role.toUpperCase() === 'ADMIN' ? 'ADMIN' : 'USER') as Role;
 
-const normalizeStore = <T extends { settings: unknown }>(store: T) => {
-    const planTier = getStorePlanTier(store.settings);
+const normalizeStore = <T extends { settings: string | null | unknown }>(store: T) => {
+    let settingsObj = store.settings;
+    if (typeof store.settings === 'string') {
+        try {
+            settingsObj = JSON.parse(store.settings);
+        } catch (e) {
+            settingsObj = {};
+        }
+    }
+    const planTier = getStorePlanTier(settingsObj);
     return {
         ...store,
+        settings: settingsObj,
         planTier
     };
 };
@@ -225,7 +234,7 @@ export const toggleStoreMaintenance = async (req: Request, res: Response) => {
 
         await prisma.store.update({
             where: { id: store.id },
-            data: { settings: { ...currentSettings, maintenanceMode } }
+            data: { settings: JSON.stringify({ ...currentSettings, maintenanceMode }) }
         });
         res.json({ maintenanceMode });
     } catch (error) {
@@ -345,11 +354,14 @@ export const updateStorePlanByAdmin = async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Store not found' });
         }
 
-        const settings = withUpdatedPlanSettings(store.settings, tier as (typeof PLAN_TIERS)[number]);
+        const settings = withUpdatedPlanSettings(
+            typeof store.settings === 'string' ? JSON.parse(store.settings) : store.settings, 
+            tier as (typeof PLAN_TIERS)[number]
+        );
 
         const updated = await prisma.store.update({
             where: { id },
-            data: { settings: settings as Prisma.InputJsonValue }
+            data: { settings: JSON.stringify(settings) }
         });
 
         res.json(normalizeStore(updated));

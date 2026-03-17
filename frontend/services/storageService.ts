@@ -22,6 +22,7 @@ import {
 import { db, storage, auth as firebaseAuth } from '../src/lib/firebase';
 import { supabase } from '../src/lib/supabase';
 import { USE_FIREBASE } from '../src/lib/config';
+import { compressImage } from './imageCompressionService';
 import {
     User,
     Store,
@@ -117,24 +118,47 @@ export const getCurrentUser = async (): Promise<User | null> => {
 
 // --- Storage / File Uploads ---
 
+// Check if file is an image that should be compressed
+const shouldCompress = (file: File): boolean => {
+    const imageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    return imageTypes.includes(file.type);
+};
+
 export const uploadFile = async (path: string, file: File): Promise<string> => {
+    let fileToUpload = file;
+
+    // Compress image before uploading (with fallback to original on error)
+    if (shouldCompress(file)) {
+        try {
+            const compressed = await compressImage(file);
+            // Create a new File from the compressed blob
+            fileToUpload = new File([compressed.blob], file.name, {
+                type: compressed.blob.type
+            });
+            console.log(`Image compressed: ${file.size} -> ${compressed.compressedSize} bytes (${compressed.compressionRatio.toFixed(1)}% reduction)`);
+        } catch (error) {
+            console.warn('Image compression failed, using original:', error);
+            // Fall back to original file on compression failure
+        }
+    }
+
     if (USE_FIREBASE) {
         const storageRef = ref(storage, path);
-        await uploadBytes(storageRef, file);
+        await uploadBytes(storageRef, fileToUpload);
         return getDownloadURL(storageRef);
     } else {
         const client = supabase;
         if (!client) throw new Error('Supabase not configured');
         const { data, error } = await client.storage
             .from('acolmmerce-assets') // Assuming this bucket exists
-            .upload(path, file, { upsert: true });
-        
+            .upload(path, fileToUpload, { upsert: true });
+
         if (error) throw error;
-        
+
         const { data: { publicUrl } } = client.storage
             .from('acolmmerce-assets')
             .getPublicUrl(path);
-            
+
         return publicUrl;
     }
 };
@@ -218,7 +242,7 @@ export const getStoreById = async (storeId: string): Promise<Store | undefined> 
             `)
             .or(`id.eq.${storeId},slug.eq.${storeId}`)
             .single();
-        
+
         if (error || !data) return undefined;
         return data as Store;
     }

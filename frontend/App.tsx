@@ -17,6 +17,11 @@ import { AuthCallback } from './pages/AuthCallback';
 import { canAccessAdminDashboard, getPostLoginRoute } from './src/lib/adminAccess';
 import './src/lib/firebase';
 
+// New pages
+import Legal from './pages/Legal';
+import DisputeCenter from './pages/DisputeCenter';
+import FeedbackPage from './pages/FeedbackPage';
+
 // --- Landing ---
 import Landing from './pages/Landing';
 
@@ -107,6 +112,14 @@ const AppRoutes = () => {
       {/* Public Shop Routes */}
       <Route path="/shop" element={<MarketplaceWrapper />} />
       <Route path="/store/:storeId/*" element={<StoreFrontWrapper />} />
+
+      {/* Legal & Support Routes */}
+      <Route path="/legal" element={<Legal />} />
+      <Route path="/dispute-center" element={<DisputeCenter />} />
+      <Route path="/dispute-center/:mode" element={<DisputeCenter />} />
+
+      {/* Feedback Routes */}
+      <Route path="/feedback/:type/:id" element={<FeedbackPage />} />
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />

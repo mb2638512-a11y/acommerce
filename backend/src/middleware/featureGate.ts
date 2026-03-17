@@ -17,7 +17,14 @@ const getStoreSettings = async (storeId: string): Promise<Record<string, unknown
    where: { id: storeId },
    select: { settings: true }
   });
-  return (store?.settings as Record<string, unknown>) || null;
+  if (typeof store?.settings === 'string') {
+   try {
+    return JSON.parse(store.settings);
+   } catch (e) {
+    return {};
+   }
+  }
+  return (store?.settings as any) || null;
  } catch (error) {
   console.error('Error fetching store settings:', error);
   return null;

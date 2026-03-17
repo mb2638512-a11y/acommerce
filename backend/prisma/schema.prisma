@@ -4,47 +4,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
-}
-
-enum Role {
-  USER
-  ADMIN
-}
-
-enum KYCStatus {
-  PENDING
-  APPROVED
-  REJECTED
-}
-
-enum ProductStatus {
-  ACTIVE
-  DRAFT
-  ARCHIVED
-}
-
-enum OrderStatus {
-  PENDING
-  PROCESSING
-  SHIPPED
-  DELIVERED
-  CANCELLED
-  REFUNDED
-}
-
-enum PaymentStatus {
-  PAID
-  PENDING
-  REFUNDED
-  FAILED
-}
-
-enum FulfillmentStatus {
-  UNFULFILLED
-  PARTIAL
-  FULFILLED
 }
 
 model User {
@@ -52,21 +13,23 @@ model User {
   email     String   @unique
   password  String
   name      String
-  role      Role     @default(USER)
+  role      String   @default("USER") // USER, ADMIN
   avatar    String?
   isVerified Boolean  @default(false)
-  kycStatus  KYCStatus @default(PENDING)
+  kycStatus  String   @default("PENDING") // PENDING, APPROVED, REJECTED
   idDocumentUrl String?
   paymentVerified Boolean @default(false)
   stripeCustomerId String?
   paypalPayerId String?
   phone     String?
   companyName String?
+  plan      String   @default("FREE")  // FREE, PRO, PREMIUM, ENTERPRISE
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  stores    Store[]
-  searches  SearchHistory[]
+  stores         Store[]
+  searches       SearchHistory[]
+  sellerAccounts SellerAccount[]
 }
 
 model SearchHistory {
@@ -90,7 +53,7 @@ model Store {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
-  settings    Json?    // StoreSettings as JSON
+  settings    String?    // StoreSettings as JSON
   
   products    Product[]
   orders      Order[]
@@ -102,7 +65,8 @@ model Store {
   discounts   DiscountCode[]
   messages    Message[]
   activityLog ActivityLog[]
-  carts       Cart[]
+  carts           Cart[]
+  moderationFlags ModerationFlag[]
 }
 
 model Cart {
@@ -111,7 +75,7 @@ model Cart {
   store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   userId    String?
   email     String?
-  items     Json
+  items     String       // Serialized CartItem[]
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
 }
@@ -123,7 +87,7 @@ model Product {
   name        String
   description String?
   category    String?
-  status      ProductStatus @default(ACTIVE)
+  status      String        @default("ACTIVE") // ACTIVE, DRAFT, ARCHIVED
   price       Float
   compareAtPrice Float?
   costPerItem Float?
@@ -131,10 +95,10 @@ model Product {
   sku         String?
   barcode     String?
   trackQuantity Boolean     @default(true)
-  images      String[]
+  images      String        // Comma-separated or JSON serialized string
   isFeatured  Boolean       @default(false)
   isDigital   Boolean       @default(false)
-  variants    Json?         // ProductVariant[]
+  variants    String?       // Serialized ProductVariant[]
   
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
@@ -161,12 +125,12 @@ model Order {
   discount    Float
   total       Float
   
-  status      OrderStatus @default(PENDING)
-  paymentStatus PaymentStatus @default(PENDING)
-  fulfillmentStatus FulfillmentStatus @default(UNFULFILLED)
+  status      String      @default("PENDING") // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED, REFUNDED
+  paymentStatus String    @default("PENDING") // PAID, PENDING, REFUNDED, FAILED
+  fulfillmentStatus String @default("UNFULFILLED") // UNFULFILLED, PARTIAL, FULFILLED
   
   items       OrderItem[]
-  timeline    Json?       // OrderTimelineEntry[]
+  timeline    String?       // Serialized OrderTimelineEntry[]
   date        DateTime    @default(now())
 }
 
@@ -195,8 +159,8 @@ model Customer {
   ordersCount   Int      @default(0)
   lastOrderDate DateTime?
   notes         String?
-  tags          String[]
-  wishlist      String[] // Product IDs
+  tags          String?  // Serialized Tags
+  wishlist      String?  // Serialized Product IDs
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -207,13 +171,81 @@ model Customer {
 }
 
 model Review {
+  id        String   @id @default(uuid())
+  orderId   String?
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  buyerId   String?
+  sellerId  String?
+  rating    Int      // 1-5 stars
+  title     String?
+  content   String?
+  isVerifiedPurchase Boolean @default(false)
+  customerName String?
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SellerRating {
   id          String   @id @default(uuid())
-  productId   String
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sellerId    String
+  buyerId     String
   rating      Int
+  category    String   // communication, shipping, product_accuracy
   comment     String?
-  customerName String
   createdAt   DateTime @default(now())
+}
+
+// Enhanced Feedback System
+model Feedback {
+  id          String   @id @default(uuid())
+  type        String   // PRODUCT, SELLER, PLATFORM, SHIPPING, CUSTOMER_SERVICE
+  targetId    String   // productId, sellerId, orderId
+  userId      String
+  rating      Int      // 1-5 stars
+  category    String?  // For sellers: communication, shipping, product_quality, overall
+  title       String?
+  content     String
+  pros        String?  // What was good
+  cons        String?  // What could improve
+  images      String?  // Image URLs (JSON array)
+  isVerified  Boolean  @default(false)
+  helpfulCount Int     @default(0)  // Count of helpful votes
+  status      String   @default("PUBLISHED") // DRAFT, PUBLISHED, FLAGGED, DELETED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  responses   FeedbackResponse[]
+  votes       FeedbackVote[]
+
+  @@index([type, targetId])
+  @@index([userId])
+  @@index([status])
+}
+
+model FeedbackResponse {
+  id          String   @id @default(uuid())
+  feedbackId  String
+  feedback    Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  userId      String   // Seller or support response
+  userName    String?  // Name of responder
+  content     String
+  createdAt   DateTime @default(now())
+
+  @@index([feedbackId])
+}
+
+model FeedbackVote {
+  id          String   @id @default(uuid())
+  feedbackId  String
+  feedback    Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  userId      String
+  vote        Int      // 1 = helpful, -1 = not helpful
+  createdAt   DateTime @default(now())
+
+  @@unique([feedbackId, userId]) // One vote per user per feedback
+  @@index([feedbackId])
 }
 
 model BlogPost {
@@ -331,7 +363,7 @@ model PlatformLog {
   level       String   @default("INFO") // INFO, WARN, ERROR
   message     String
   source      String
-  details     Json?
+  details     String?  // Serialized JSON
   timestamp   DateTime @default(now())
 }
 
@@ -339,8 +371,103 @@ model ApiKey {
   id          String   @id @default(uuid())
   name        String
   key         String   @unique
-  permissions String[]
+  permissions String?  // Serialized Permissions
   lastUsed    DateTime?
   expiresAt   DateTime?
   createdAt   DateTime @default(now())
+}
+
+// Stripe Connect Models for Multi-Vendor Marketplace
+model SellerAccount {
+  id               String   @id @default(uuid())
+  userId           String
+  stripeAccountId  String   @unique  // Connect account ID
+  chargesEnabled   Boolean  @default(false)
+  payoutsEnabled   Boolean  @default(false)
+  detailsSubmitted Boolean  @default(false)
+  commissionRate   Float    @default(0.05)  // 5% default
+  planTier         String   @default("FREE")  // FREE, PRO
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  user         User          @relation(fields: [userId], references: [id])
+  commissions  Commission[]
+  
+  @@index([userId])
+}
+
+model Commission {
+  id                String           @id @default(uuid())
+  orderId           String
+  sellerId          String
+  seller            SellerAccount    @relation(fields: [sellerId], references: [id])
+  amount            Float            // Total order amount
+  commission        Float            // Platform takes
+  sellerPayout      Float            // Seller receives
+  status            String           @default("PENDING") // PENDING, PAID, FAILED, CANCELLED
+  stripeTransferId  String?
+  stripeChargeId    String?
+  createdAt         DateTime         @default(now())
+  paidAt            DateTime?
+  
+  @@index([sellerId])
+  @@index([orderId])
+}
+
+// Content Moderation Models
+model ModerationFlag {
+  id            String   @id @default(uuid())
+  productId     String
+  storeId       String
+  store         Store    @relation(fields: [storeId], references: [id])
+  productName   String
+  productCategory String?
+  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED, FLAGGED
+  flags         String   // Serialized string[] of flags
+  confidence    Float    @default(0)
+  category      String?
+  moderatorNote String?
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([productId])
+  @@index([storeId])
+  @@index([status])
+}
+
+model ModerationLog {
+  id            String   @id @default(uuid())
+  action        String   // PRODUCT_CHECKED, PRODUCT_APPROVED, PRODUCT_REJECTED
+  productId     String?
+  storeId       String?
+  moderatorId   String?
+  details       String?  // JSON serialized details
+  createdAt     DateTime @default(now())
+  
+  @@index([productId])
+  @@index([moderatorId])
+}
+
+// Dispute Resolution Models
+model Dispute {
+  id          String   @id @default(uuid())
+  orderId     String
+  buyerId     String
+  sellerId    String
+  reason      String   // not_received, not_as_described, damaged, other
+  description String
+  status      String   @default("OPEN") // OPEN, UNDER_REVIEW, RESOLVED, CLOSED
+  resolution  String?
+  refundAmount Float?
+  sellerResponse String?
+  evidenceUrls String?  // JSON array of evidence URLs
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+  
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([orderId])
+  @@index([status])
 }

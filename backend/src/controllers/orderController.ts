@@ -96,8 +96,8 @@ export const createOrder = async (req: Request, res: Response) => {
                         storeId: data.storeId,
                         totalSpent: 0,
                         ordersCount: 0,
-                        tags: [],
-                        wishlist: []
+                        tags: '' as any,
+                        wishlist: '' as any
                     }
                 });
             }
@@ -135,13 +135,13 @@ export const createOrder = async (req: Request, res: Response) => {
                     status: 'PENDING',
                     fulfillmentStatus: 'UNFULFILLED',
                     paymentStatus: 'PENDING',
-                    timeline: [
+                    timeline: JSON.stringify([
                         {
                             date: new Date().toISOString(),
                             status: 'PENDING',
                             note: data.customerNotes || 'Order created'
                         }
-                    ],
+                    ]),
                     items: {
                         create: data.items.map((item) => {
                             const product = productMap.get(item.id)!;
@@ -243,7 +243,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
         });
         if (!targetOrder) return res.status(404).json({ error: 'Order not found' });
 
-        const timeline = Array.isArray(targetOrder.timeline) ? targetOrder.timeline : [];
+        const timeline = typeof targetOrder.timeline === 'string' ? JSON.parse(targetOrder.timeline) : (Array.isArray(targetOrder.timeline) ? targetOrder.timeline : []);
         timeline.push({
             date: new Date().toISOString(),
             status: payload.status || 'UPDATED',
@@ -256,7 +256,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
                 status: payload.status,
                 fulfillmentStatus: payload.fulfillmentStatus,
                 paymentStatus: payload.paymentStatus,
-                timeline
+                timeline: JSON.stringify(timeline)
             }
         });
 

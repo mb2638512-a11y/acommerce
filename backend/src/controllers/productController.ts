@@ -3,6 +3,8 @@ import prisma from '../utils/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { z } from 'zod';
 import { getStorePlan } from '../utils/storePlan';
+import { moderateProduct, isModerationEnabled, shouldBlockProduct } from '../services/contentModerationService';
+import { createProductFlag } from './moderationController';
 
 const createProductSchema = z.object({
     name: z.string().trim().min(2).max(140),
@@ -48,8 +50,31 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
         const productCount = await prisma.product.count({ where: { storeId } });
         if (productCount >= plan.limits.maxProducts) {
             return res.status(403).json({
-                error: `Plan limit reached. ${plan.label} supports up to ${plan.limits.maxProducts} products.`
+                error: 'Product limit reached',
+                message: `Your ${plan.label} plan supports up to ${plan.limits.maxProducts} products. You've already created ${productCount} products.`,
+                upgradeUrl: '/pricing',
+                currentPlan: plan.label,
+                limit: plan.limits.maxProducts,
+                currentCount: productCount
             });
+        }
+
+        // Content Moderation Check
+        let moderationResult = null;
+        if (isModerationEnabled()) {
+            moderationResult = await moderateProduct({
+                name: payload.name,
+                description: payload.description || '',
+                category: payload.category || ''
+            });
+
+            if (shouldBlockProduct(moderationResult)) {
+                return res.status(400).json({
+                    error: 'Product violates content policy',
+                    message: moderationResult.message,
+                    flags: moderationResult.flags
+                });
+            }
         }
 
         const product = await prisma.product.create({
@@ -66,12 +91,23 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
                 sku: payload.sku,
                 barcode: payload.barcode,
                 trackQuantity: payload.trackQuantity ?? true,
-                images: payload.images || [],
+                images: payload.images ? payload.images.join(',') : '',
                 isFeatured: payload.isFeatured ?? false,
                 isDigital: payload.isDigital ?? false,
-                variants: payload.variants as any
+                variants: payload.variants ? JSON.stringify(payload.variants) : null
             },
         });
+
+        // Create moderation flag if product was not blocked but has flags
+        if (moderationResult && moderationResult.flags.length > 0) {
+            await createProductFlag(
+                product.id,
+                storeId,
+                product.name,
+                product.category,
+                moderationResult
+            );
+        }
 
         res.json(product);
     } catch (error) {

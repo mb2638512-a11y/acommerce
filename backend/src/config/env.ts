@@ -28,7 +28,18 @@ export const env = {
     port: Number(process.env.PORT || 5000),
     jwtSecret: getRequiredEnv('JWT_SECRET'),
     corsOrigins,
-    adminDashboardEmail
+    adminDashboardEmail,
+    geminiApiKey: process.env.GEMINI_API_KEY || '',
+    openRouterApiKey: process.env.OPENROUTER_API_KEY || '',
+    stripeSecretKey: process.env.STRIPE_SECRET_KEY || '',
+    stripeConnectSecret: process.env.STRIPE_CONNECT_SECRET || process.env.STRIPE_SECRET_KEY || '',
+    platformCommissionFree: Number(process.env.PLATFORM_COMMISSION_FREE || '0.05'),
+    platformCommissionPro: Number(process.env.PLATFORM_COMMISSION_PRO || '0.02'),
+    platformCommissionPremium: Number(process.env.PLATFORM_COMMISSION_PREMIUM || '0.01'),
+    platformCommissionEnterprise: Number(process.env.PLATFORM_COMMISSION_ENTERPRISE || '0'),
+    // Content Moderation Settings
+    contentModerationEnabled: process.env.CONTENT_MODERATION_ENABLED === 'true',
+    moderationStrictMode: process.env.MODERATION_STRICT_MODE === 'true',
 };
 
 export const isProduction = env.nodeEnv === 'production';

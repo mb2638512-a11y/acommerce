@@ -138,3 +138,42 @@ export const chatWithAI = async (message: string, context: any): Promise<string>
     return "I'm currently offline. Please contact support.";
   }
 };
+
+export const analyzeSentiment = async (content: string): Promise<{ sentiment: 'positive' | 'neutral' | 'negative', score: number, summary: string }> => {
+  try {
+    const response = await api.post<AIResponse>('/ai/generate', {
+      prompt: `Analyze the sentiment of the following customer feedback: "${content}". 
+      Return JSON: { "sentiment": "positive"|"neutral"|"negative", "score": 0-1, "summary": "short summary" }`,
+      type: 'json',
+      model: 'nvidia/llama-3.1-nemotron-70b-instruct'
+    });
+    return JSON.parse(response.data.text || '{}');
+  } catch (error) {
+    return { sentiment: 'neutral', score: 0.5, summary: "Analysis failed." };
+  }
+};
+
+export const translateContent = async (text: string, targetLang: string): Promise<string> => {
+  try {
+    const response = await api.post<AIResponse>('/ai/generate', {
+      prompt: `Translate the following text to ${targetLang}: "${text}". Return only the translated text.`,
+      model: 'meta-llama/llama-3.1-8b-instruct'
+    });
+    return response.data.text || text;
+  } catch (error) {
+    return text;
+  }
+};
+
+export const getPersonalizedRecommendations = async (history: string[], categories: string[]): Promise<string[]> => {
+  try {
+    const response = await api.post<AIResponse>('/ai/generate', {
+      prompt: `Based on a user who viewed ${history.join(', ')} in categories ${categories.join(', ')}, suggest 4 relevant products they might like. Return only the names separated by commas.`,
+      model: 'qwen/qwen-2.5-32b-instruct'
+    });
+    const text = response.data.text || "";
+    return text.split(',').map(s => s.trim()).filter(s => s.length > 0);
+  } catch (error) {
+    return [];
+  }
+};

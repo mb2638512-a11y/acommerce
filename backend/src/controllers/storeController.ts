@@ -43,6 +43,36 @@ export const createStore = async (req: AuthRequest, res: Response) => {
 
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
+        // Check user's store limit based on their plan
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { role: true }
+        });
+
+        // Get current store count
+        const storeCount = await prisma.store.count({
+            where: { ownerId: userId }
+        });
+
+        // Define store limits per role/plan
+        const maxStoresMap: Record<string, number> = {
+            admin: 999, // Admins can create unlimited stores
+            seller: 5,  // Sellers can create up to 5 stores
+            customer: 1 // Customers can create 1 store
+        };
+
+        const maxStores = maxStoresMap[user?.role || 'customer'];
+
+        if (storeCount >= maxStores) {
+            return res.status(403).json({
+                error: 'Store limit reached',
+                message: `You can only create up to ${maxStores} store(s). You've already created ${storeCount} store(s).`,
+                upgradeUrl: '/pricing',
+                currentCount: storeCount,
+                limit: maxStores
+            });
+        }
+
         const finalSlug = await buildUniqueSlug(name, slug);
         const baseSettings = withDefaultSubscription(settings);
 
@@ -53,7 +83,7 @@ export const createStore = async (req: AuthRequest, res: Response) => {
                 description,
                 themeColor: themeColor || 'indigo',
                 ownerId: userId,
-                settings: {
+                settings: JSON.stringify({
                     shippingFee: 0,
                     taxRate: 0,
                     currency: 'USD',
@@ -64,7 +94,7 @@ export const createStore = async (req: AuthRequest, res: Response) => {
                     borderRadius: 'md',
                     socialLinks: {},
                     ...baseSettings
-                }
+                })
             }
         });
 

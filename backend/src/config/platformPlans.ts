@@ -1,6 +1,20 @@
 export const PLAN_TIERS = ['STARTER', 'PRO', 'PREMIUM', 'ENTERPRISE'] as const;
 export type PlanTier = typeof PLAN_TIERS[number];
 
+// Commission rates for seller accounts based on plan tier
+export const PLAN_COMMISSION_RATES: Record<string, number> = {
+    FREE: 0.05,       // 5% commission
+    STARTER: 0.05,    // 5% commission
+    PRO: 0.02,        // 2% commission
+    PREMIUM: 0.01,    // 1% commission
+    ENTERPRISE: 0,   // 0% commission (enterprise gets 0%)
+};
+
+// Get commission rate for a plan tier
+export const getCommissionRate = (planTier: string): number => {
+    return PLAN_COMMISSION_RATES[planTier] ?? 0.05;
+};
+
 // Feature flags interface for e-commerce platform (~280 features)
 // Refactored to focus only on e-commerce relevant features
 export interface FeatureFlags {
@@ -2335,13 +2349,13 @@ export const hasAdvancedFeatureGroup = (tier: PlanTier, group: keyof typeof ADVA
 export const PLATFORM_PLANS: Record<PlanTier, PlanDefinition> = {
     STARTER: {
         tier: 'STARTER',
-        label: 'Starter',
+        label: 'Starter (Free)',
         monthlyPriceUsd: 0,
         limits: {
-            maxProducts: 50,
-            maxDiscountCodes: 5,
-            maxStaffMembers: 1,
-            aiRequestsPerDay: 30
+            maxProducts: 200,
+            maxDiscountCodes: 10,
+            maxStaffMembers: 2,
+            aiRequestsPerDay: 50
         },
         features: {
             // Original Core Features (25) - all false for STARTER

@@ -38,7 +38,7 @@ const Marketplace: React.FC = () => {
         queryKey: ['searchHistory'],
         queryFn: async () => {
             try {
-                const res = await api.get<{id: string, query: string}[]>('/search');
+                const res = await api.get<{ id: string, query: string }[]>('/search');
                 return res.data;
             } catch (e) {
                 return [];
@@ -247,7 +247,7 @@ const Marketplace: React.FC = () => {
                                             alt={product.name}
                                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                                         />
-                                        
+
                                         {/* Status Tags */}
                                         <div className="absolute top-5 left-5 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity translate-x-3 group-hover:translate-x-0 duration-500">
                                             {product.salesCount > 5 && (
@@ -259,7 +259,7 @@ const Marketplace: React.FC = () => {
 
                                         {/* Dynamic gradient overlay */}
                                         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                                        
+
                                         <div className="absolute bottom-6 inset-x-6 opacity-0 group-hover:opacity-100 translate-y-4 group-hover:translate-y-0 transition-all duration-500">
                                             <button className="w-full py-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-2xl flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all">
                                                 Explore Asset <ArrowRight size={14} />
@@ -271,7 +271,7 @@ const Marketplace: React.FC = () => {
                                         <div className="flex justify-between items-start mb-2">
                                             <h3 className="font-heading font-black text-xl text-slate-900 dark:text-white tracking-tight line-clamp-1 group-hover:text-indigo-600 transition-colors uppercase">{product.name}</h3>
                                         </div>
-                                        
+
                                         <div className="flex items-center justify-between mt-auto pt-4 border-t border-slate-100 dark:border-white/5">
                                             <div className="flex items-center gap-2">
                                                 <div className="w-6 h-6 rounded-full bg-slate-900 dark:bg-white flex items-center justify-center text-[8px] font-black text-white dark:text-slate-900">
@@ -293,3 +293,5 @@ const Marketplace: React.FC = () => {
         </div>
     );
 };
+
+export default Marketplace;

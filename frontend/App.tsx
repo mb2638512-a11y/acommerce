@@ -6,7 +6,7 @@ import { StoreAdmin } from './pages/StoreAdmin';
 import { StoreFront } from './pages/StoreFront';
 import { PlatformAdmin } from './pages/PlatformAdmin';
 import { UserProfile } from './pages/UserProfile';
-import { Marketplace } from './pages/Marketplace';
+import Marketplace from './pages/Marketplace';
 import { Auth } from './pages/Auth';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';

@@ -39,3 +39,5 @@ backend/prisma/*.sqlite*
 *.njsproj
 *.sln
 *.sw?
+
+.vercel

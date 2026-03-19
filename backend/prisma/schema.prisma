@@ -110,6 +110,12 @@ model Product {
   isDigital   Boolean       @default(false)
   variants    String?       // Serialized ProductVariant[]
   
+  // Inventory Type: OWN = Seller's warehouse (Mera Maal), VIRTUAL = Dropshipped
+  inventoryType   String        @default("OWN") // OWN, VIRTUAL
+  originalProductId String?      // If VIRTUAL, reference to original product
+  originalStoreId String?       // Store where product is sourced from
+  commissionRate  Float        @default(0.05) // 5% commission for OWN inventory
+  
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 

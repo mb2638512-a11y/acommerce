@@ -16,6 +16,9 @@ export interface User {
   paypalPayerId?: string;
   joinedAt?: number;
   createdAt?: string | number;
+  // For role-based redirect
+  stores?: string[]; // Array of store IDs the user owns
+  plan?: PlanTier;
 }
 
 export interface Review {

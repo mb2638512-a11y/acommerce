@@ -183,3 +183,167 @@ export const deleteProduct = async (req: AuthRequest, res: Response) => {
         res.status(500).json({ error: 'Failed to delete product' });
     }
 };
+
+// Schema for adding virtual/dropship product
+const virtualProductSchema = z.object({
+    productId: z.string().uuid(),
+    storeId: z.string().uuid(),
+    price: z.coerce.number().positive()
+});
+
+// Get marketplace products for dropshipping (from other sellers)
+export const getMarketplaceProducts = async (req: AuthRequest, res: Response) => {
+    try {
+        const { category, search, page = '1', limit = '20' } = req.query;
+        const userId = req.user?.userId;
+
+        const pageNum = parseInt(page as string) || 1;
+        const limitNum = parseInt(limit as string) || 20;
+        const skip = (pageNum - 1) * limitNum;
+
+        // Build where clause - only get OWN inventory products from other stores
+        const where: any = {
+            inventoryType: 'OWN',
+            status: 'ACTIVE',
+            store: {
+                // Exclude user's own store if logged in
+                ...(userId ? { ownerId: { not: userId } } : {})
+            }
+        };
+
+        if (category) {
+            where.category = category as string;
+        }
+
+        if (search) {
+            where.OR = [
+                { name: { contains: search as string } },
+                { description: { contains: search as string } }
+            ];
+        }
+
+        const [products, total] = await Promise.all([
+            prisma.product.findMany({
+                where,
+                select: {
+                    id: true,
+                    name: true,
+                    description: true,
+                    category: true,
+                    price: true,
+                    images: true,
+                    store: {
+                        select: {
+                            id: true,
+                            name: true,
+                            slug: true
+                        }
+                    }
+                },
+                skip,
+                take: limitNum,
+                orderBy: { createdAt: 'desc' }
+            }),
+            prisma.product.count({ where })
+        ]);
+
+        res.json({
+            products,
+            pagination: {
+                page: pageNum,
+                limit: limitNum,
+                total,
+                pages: Math.ceil(total / limitNum)
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching marketplace products:', error);
+        res.status(500).json({ error: 'Failed to fetch marketplace products' });
+    }
+};
+
+// Add a virtual product to own store (Dropshipping)
+export const addVirtualProduct = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const { productId, storeId, price } = virtualProductSchema.parse(req.body);
+
+        // Verify the target store belongs to the user
+        const targetStore = await prisma.store.findUnique({
+            where: { id: storeId },
+            select: { ownerId: true, settings: true }
+        });
+
+        if (!targetStore || targetStore.ownerId !== userId) {
+            return res.status(403).json({ error: 'Forbidden - Store not owned by user' });
+        }
+
+        // Get the original product
+        const originalProduct = await prisma.product.findUnique({
+            where: { id: productId },
+            include: { store: { select: { id: true, name: true } } }
+        });
+
+        if (!originalProduct) {
+            return res.status(404).json({ error: 'Original product not found' });
+        }
+
+        if (originalProduct.inventoryType !== 'OWN') {
+            return res.status(400).json({ error: 'Can only dropship OWN inventory products' });
+        }
+
+        if (originalProduct.storeId === storeId) {
+            return res.status(400).json({ error: 'Cannot add your own product as virtual inventory' });
+        }
+
+        // Check if already added
+        const existingVirtual = await prisma.product.findFirst({
+            where: {
+                storeId,
+                originalProductId: productId
+            }
+        });
+
+        if (existingVirtual) {
+            return res.status(400).json({ error: 'Product already added to your store' });
+        }
+
+        // Create virtual product in user's store
+        const virtualProduct = await prisma.product.create({
+            data: {
+                storeId,
+                name: originalProduct.name,
+                description: originalProduct.description,
+                category: originalProduct.category,
+                price,
+                compareAtPrice: originalProduct.compareAtPrice,
+                costPerItem: originalProduct.costPerItem,
+                stock: originalProduct.stock,
+                sku: originalProduct.sku,
+                barcode: originalProduct.barcode,
+                trackQuantity: originalProduct.trackQuantity,
+                images: originalProduct.images,
+                isFeatured: false,
+                isDigital: originalProduct.isDigital,
+                variants: originalProduct.variants,
+                inventoryType: 'VIRTUAL',
+                originalProductId: productId,
+                originalStoreId: originalProduct.storeId,
+                commissionRate: 0 // No commission for virtual - seller sets their own price
+            }
+        });
+
+        res.status(201).json({
+            success: true,
+            product: virtualProduct,
+            sourceStore: originalProduct.store
+        });
+    } catch (error) {
+        console.error('Error adding virtual product:', error);
+        res.status(500).json({ error: 'Failed to add virtual product' });
+    }
+};

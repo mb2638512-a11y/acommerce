@@ -44,11 +44,29 @@ export const AuthCallback: React.FC = () => {
 
     showToast(`Welcome via Google, ${response.data.user.name}!`, 'success');
 
-    if (response.data.user.isVerified === false) {
+    // Triple-Layer Access Strategy: Role-based redirect
+    const user = response.data.user;
+
+    // Check if user is verified
+    if (user.isVerified === false) {
      navigate('/verify', { replace: true });
-    } else {
-     navigate('/dashboard', { replace: true });
+     return;
     }
+
+    // Layer 1: Secret Admin (stealth admin with whitelisted email)
+    if (user.role === 'admin') {
+     navigate('/admin', { replace: true });
+     return;
+    }
+
+    // Layer 2: Seller - if user has stores, go to seller dashboard
+    if (user.stores && user.stores.length > 0) {
+     navigate('/dashboard', { replace: true });
+     return;
+    }
+
+    // Layer 3: Buyer - go to marketplace
+    navigate('/marketplace', { replace: true });
 
    } catch (err: any) {
     console.error('Google Auth Error:', err);

@@ -195,19 +195,28 @@ const formatPhoneOtpResponse = (code: string) => {
     return response;
 };
 
-const formatUserResponse = (user: any) => ({
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    role: toApiRole(user.role),
-    isVerified: user.isVerified || false,
-    kycStatus: user.kycStatus,
-    paymentVerified: user.paymentVerified || false,
-    stripeCustomerId: user.stripeCustomerId,
-    paypalPayerId: user.paypalPayerId,
-    avatar: user.avatar,
-    joinedAt: user.createdAt.getTime()
-});
+const formatUserResponse = async (user: any) => {
+    // Fetch user's stores for role-based redirect
+    const stores = await prisma.store.findMany({
+        where: { ownerId: user.id },
+        select: { id: true }
+    });
+
+    return {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: toApiRole(user.role),
+        isVerified: user.isVerified || false,
+        kycStatus: user.kycStatus,
+        paymentVerified: user.paymentVerified || false,
+        stripeCustomerId: user.stripeCustomerId,
+        paypalPayerId: user.paypalPayerId,
+        avatar: user.avatar,
+        joinedAt: user.createdAt.getTime(),
+        stores: stores.map(s => s.id) // Array of store IDs for role-based redirect
+    };
+};
 
 export const register = async (req: Request, res: Response) => {
     try {
@@ -243,7 +252,7 @@ export const register = async (req: Request, res: Response) => {
         const token = generateToken(user.id, user.role);
         res.json({
             token,
-            user: formatUserResponse(user),
+            user: await formatUserResponse(user),
             message: 'Registration successful. Please check your email to verify your account.'
         });
     } catch (error) {
@@ -266,7 +275,7 @@ export const login = async (req: Request, res: Response) => {
         }
 
         const token = generateToken(user.id, user.role);
-        res.json({ token, user: formatUserResponse(user) });
+        res.json({ token, user: await formatUserResponse(user) });
     } catch (error) {
         console.error('Login error:', error);
         if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
@@ -285,7 +294,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
             data: { name }
         });
 
-        res.json(formatUserResponse(user));
+        res.json(await formatUserResponse(user));
     } catch (error) {
         if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
         res.status(500).json({ error: 'Failed to update profile' });
@@ -304,7 +313,7 @@ export const verifyAccount = async (req: AuthRequest, res: Response) => {
             data: { isVerified: true, phone, companyName }
         });
 
-        res.json({ user: formatUserResponse(user) });
+        res.json({ user: await formatUserResponse(user) });
     } catch (error) {
         if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
         res.status(500).json({ error: 'Failed to verify account' });
@@ -344,7 +353,7 @@ export const googleAuth = async (req: Request, res: Response) => {
         }
 
         const token = generateToken(user.id, user.role);
-        res.json({ token, user: formatUserResponse(user) });
+        res.json({ token, user: await formatUserResponse(user) });
     } catch (error) {
         if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
         res.status(500).json({ error: 'Server error during OAuth' });
@@ -418,7 +427,7 @@ export const verifyPhoneOtp = async (req: Request, res: Response) => {
         const token = generateToken(user.id, user.role);
         res.json({
             token,
-            user: formatUserResponse(user),
+            user: await formatUserResponse(user),
             message: 'Phone login successful'
         });
     } catch (error) {
@@ -472,7 +481,7 @@ export const verifyPhoneRegister = async (req: Request, res: Response) => {
         const token = generateToken(user.id, user.role);
         res.json({
             token,
-            user: formatUserResponse(user),
+            user: await formatUserResponse(user),
             message: 'Phone registration successful'
         });
     } catch (error) {
@@ -494,7 +503,7 @@ export const submitKyc = async (req: AuthRequest, res: Response) => {
             data: { kycStatus: 'APPROVED', idDocumentUrl }
         });
 
-        res.json({ user: formatUserResponse(user) });
+        res.json({ user: await formatUserResponse(user) });
     } catch (error) {
         if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
         res.status(500).json({ error: 'Failed to submit KYC' });
@@ -520,7 +529,7 @@ export const verifyPayment = async (req: AuthRequest, res: Response) => {
             data: updateData
         });
 
-        res.json({ user: formatUserResponse(user) });
+        res.json({ user: await formatUserResponse(user) });
     } catch (error) {
         if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
         res.status(500).json({ error: 'Failed to verify payment method' });
@@ -672,7 +681,7 @@ export const verifyPhone = async (req: AuthRequest, res: Response) => {
 
             res.json({
                 message: 'Phone verified successfully',
-                user: formatUserResponse(user)
+                user: await formatUserResponse(user)
             });
         } else {
             res.status(400).json({ error: 'Invalid verification code' });

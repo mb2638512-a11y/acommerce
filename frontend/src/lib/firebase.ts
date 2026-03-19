@@ -2,15 +2,15 @@
 import { initializeApp, FirebaseApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, Auth } from "firebase/auth";
 
-// Firebase configuration
+// Firebase configuration from environment variables (with fallback to hardcoded values)
 const firebaseConfig = {
- apiKey: "AIzaSyCzjreTSmDX1CicjY8cHsngyekea9lYNBk",
- authDomain: "acommerce-42565.firebaseapp.com",
- projectId: "acommerce-42565",
- storageBucket: "acommerce-42565.firebasestorage.app",
- messagingSenderId: "231208905773",
- appId: "1:231208905773:web:32b163a50c1d2a0c3e9ca4",
- measurementId: "G-2W1G3TX5RT"
+ apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCzjreTSmDX1CicjY8cHsngyekea9lYNBk",
+ authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "acommerce-42565.firebaseapp.com",
+ projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "acommerce-42565",
+ storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "acommerce-42565.firebasestorage.app",
+ messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "231208905773",
+ appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:231208905773:web:32b163a50c1d2a0c3e9ca4",
+ measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-2W1G3TX5RT"
 };
 
 // Track if Firebase is initialized

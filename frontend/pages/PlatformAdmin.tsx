@@ -51,7 +51,8 @@ import {
   Video,
   TestTube,
   LineChart,
-  Rocket
+  Rocket,
+  Loader2
 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
@@ -191,7 +192,8 @@ type AdminTab =
   | 'products'
   | 'system'
   | 'features'
-  | 'moderation';
+  | 'moderation'
+  | 'promocodes';
 
 interface PremiumControl {
   id: string;
@@ -511,6 +513,25 @@ export const PlatformAdmin: React.FC<PlatformAdminProps> = ({ onNavigate, onLogo
     enabled: !!user && activeTab === 'moderation'
   });
 
+  // Promo codes queries
+  const { data: promoCodes = [], isLoading: isPromoLoading, refetch: refetchPromoCodes } = useQuery({
+    queryKey: ['promoCodes'],
+    queryFn: async () => {
+      const res = await api.get<any[]>('/promo');
+      return res.data;
+    },
+    enabled: !!user && activeTab === 'promocodes'
+  });
+
+  const { data: promoStats, isLoading: isPromoStatsLoading } = useQuery({
+    queryKey: ['promoStats'],
+    queryFn: async () => {
+      const res = await api.get<any>('/promo/stats');
+      return res.data;
+    },
+    enabled: !!user && activeTab === 'promocodes'
+  });
+
   const approveProductMutation = useMutation({
     mutationFn: async (id: string) => {
       await api.put(`/moderation/approve/${id}`, { note: 'Approved by admin' });
@@ -530,6 +551,66 @@ export const PlatformAdmin: React.FC<PlatformAdminProps> = ({ onNavigate, onLogo
       queryClient.invalidateQueries({ queryKey: ['moderationFlags'] });
       queryClient.invalidateQueries({ queryKey: ['adminProducts'] });
       showToast({ title: 'Success', description: 'Product rejected and archived' });
+    }
+  });
+
+  // Promo code mutations
+  const createPromoCodeMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await api.post('/promo', data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['promoCodes'] });
+      queryClient.invalidateQueries({ queryKey: ['promoStats'] });
+      showToast({ title: 'Success', description: 'Promo code created successfully' });
+    },
+    onError: (error: any) => {
+      showToast({ title: 'Error', description: error.response?.data?.error || 'Failed to create promo code', type: 'error' });
+    }
+  });
+
+  const updatePromoCodeMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const res = await api.patch(`/promo/${id}`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['promoCodes'] });
+      queryClient.invalidateQueries({ queryKey: ['promoStats'] });
+      showToast({ title: 'Success', description: 'Promo code updated successfully' });
+    },
+    onError: (error: any) => {
+      showToast({ title: 'Error', description: error.response?.data?.error || 'Failed to update promo code', type: 'error' });
+    }
+  });
+
+  const deletePromoCodeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/promo/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['promoCodes'] });
+      queryClient.invalidateQueries({ queryKey: ['promoStats'] });
+      showToast({ title: 'Success', description: 'Promo code deleted successfully' });
+    },
+    onError: (error: any) => {
+      showToast({ title: 'Error', description: error.response?.data?.error || 'Failed to delete promo code', type: 'error' });
+    }
+  });
+
+  const togglePromoCodeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.patch(`/promo/${id}/toggle`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['promoCodes'] });
+      queryClient.invalidateQueries({ queryKey: ['promoStats'] });
+      showToast({ title: 'Success', description: 'Promo code status toggled' });
+    },
+    onError: (error: any) => {
+      showToast({ title: 'Error', description: error.response?.data?.error || 'Failed to toggle promo code', type: 'error' });
     }
   });
 
@@ -849,7 +930,8 @@ export const PlatformAdmin: React.FC<PlatformAdminProps> = ({ onNavigate, onLogo
     { id: 'system', label: 'System', icon: Server },
     { id: 'features', label: 'Premium Features', icon: Sparkles },
     { id: 'autopilot', label: 'Auto Pilot', icon: Rocket },
-    { id: 'moderation', label: 'Content Guard', icon: Shield }
+    { id: 'moderation', label: 'Content Guard', icon: Shield },
+    { id: 'promocodes', label: 'Promo Codes', icon: Tag }
   ] as const;
 
   return (
@@ -2103,6 +2185,151 @@ export const PlatformAdmin: React.FC<PlatformAdminProps> = ({ onNavigate, onLogo
                               className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-xs font-bold"
                             >
                               Reject
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'promocodes' && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-black flex items-center gap-2">
+                    <Tag className="text-indigo-400" /> Promo Codes
+                  </h2>
+                  <p className="text-gray-900 dark:text-gray-500 dark:text-white/60 mt-1">
+                    Manage subscription promo codes and discounts
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    const code = prompt('Enter promo code (e.g., SAVE20):');
+                    if (!code) return;
+                    const type = prompt('Discount type (PERCENTAGE/FIXED):') || 'PERCENTAGE';
+                    const value = parseFloat(prompt('Discount value:') || '0');
+                    const maxUses = parseInt(prompt('Max uses (leave empty for unlimited):') || '0') || null;
+                    const plans = prompt('Applicable plans (comma-separated, e.g., STARTER,PRO):') || 'STARTER,PRO,PREMIUM,ENTERPRISE';
+                    createPromoCodeMutation.mutate({
+                      code: code.toUpperCase(),
+                      discountType: type,
+                      discountValue: value,
+                      maxUses: maxUses,
+                      applicablePlans: plans.split(',').map(p => p.trim())
+                    });
+                  }}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium flex items-center gap-2"
+                >
+                  <Gift className="w-4 h-4" /> Create Promo Code
+                </button>
+              </div>
+
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-white dark:bg-[#0f111a]/50 border border-gray-200 dark:border-white/10 rounded-xl p-4">
+                  <p className="text-sm text-gray-500">Total Codes</p>
+                  <p className="text-2xl font-bold">{promoStats?.totalCodes || 0}</p>
+                </div>
+                <div className="bg-white dark:bg-[#0f111a]/50 border border-gray-200 dark:border-white/10 rounded-xl p-4">
+                  <p className="text-sm text-gray-500">Active Codes</p>
+                  <p className="text-2xl font-bold text-green-400">{promoStats?.activeCodes || 0}</p>
+                </div>
+                <div className="bg-white dark:bg-[#0f111a]/50 border border-gray-200 dark:border-white/10 rounded-xl p-4">
+                  <p className="text-sm text-gray-500">Total Usage</p>
+                  <p className="text-2xl font-bold">{promoStats?.totalUsage || 0}</p>
+                </div>
+                <div className="bg-white dark:bg-[#0f111a]/50 border border-gray-200 dark:border-white/10 rounded-xl p-4">
+                  <p className="text-sm text-gray-500">Discount Given</p>
+                  <p className="text-2xl font-bold text-indigo-400">${(promoStats?.totalDiscountGiven || 0).toFixed(2)}</p>
+                </div>
+              </div>
+
+              {/* Promo Codes Table */}
+              <div className="bg-white dark:bg-[#0f111a]/50 border border-gray-200 dark:border-white/10 rounded-2xl overflow-hidden">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-100 dark:bg-white/5 border-b border-gray-200 dark:border-white/10 text-gray-900 dark:text-gray-500 dark:text-white/50 uppercase tracking-wider font-bold text-xs">
+                    <tr>
+                      <th className="px-6 py-4">Code</th>
+                      <th className="px-6 py-4">Type</th>
+                      <th className="px-6 py-4">Value</th>
+                      <th className="px-6 py-4">Usage</th>
+                      <th className="px-6 py-4">Plans</th>
+                      <th className="px-6 py-4">Expires</th>
+                      <th className="px-6 py-4">Status</th>
+                      <th className="px-6 py-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10">
+                    {isPromoLoading ? (
+                      <tr>
+                        <td colSpan={8} className="px-6 py-12 text-center">
+                          <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                        </td>
+                      </tr>
+                    ) : promoCodes.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-6 py-12 text-center text-gray-500 italic">
+                          No promo codes created yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      promoCodes.map((promo: any) => (
+                        <tr key={promo.id} className="hover:bg-gray-100 dark:bg-white/5">
+                          <td className="px-6 py-4">
+                            <span className="font-mono font-bold text-indigo-400">{promo.code}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="bg-blue-500/10 text-blue-400 text-xs px-2 py-1 rounded-md font-bold uppercase">
+                              {promo.discountType}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 font-medium">
+                            {promo.discountType === 'PERCENTAGE' ? `${promo.discountValue}%` : `${promo.discountValue}`}
+                          </td>
+                          <td className="px-6 py-4">
+                            {promo.usedCount} {promo.maxUses ? `/ ${promo.maxUses}` : '(unlimited)'}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-wrap gap-1">
+                              {(promo.applicablePlans || []).map((plan: string) => (
+                                <span key={plan} className="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded">
+                                  {plan}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-gray-400">
+                            {promo.expiresAt ? new Date(promo.expiresAt).toLocaleDateString() : 'Never'}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`text-xs px-2 py-1 rounded-md font-bold uppercase ${promo.isActive
+                              ? 'bg-green-500/10 text-green-400'
+                              : 'bg-red-500/10 text-red-400'
+                              }`}>
+                              {promo.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right space-x-2">
+                            <button
+                              onClick={() => togglePromoCodeMutation.mutate(promo.id)}
+                              className="px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 text-xs font-bold"
+                            >
+                              {promo.isActive ? 'Disable' : 'Enable'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm('Are you sure you want to delete this promo code?')) {
+                                  deletePromoCodeMutation.mutate(promo.id);
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs font-bold"
+                            >
+                              Delete
                             </button>
                           </td>
                         </tr>

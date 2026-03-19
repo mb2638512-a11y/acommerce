@@ -74,6 +74,127 @@ const googleAuthSchema = z.object({
     avatar: z.string().url().optional(),
 });
 
+const sendPhoneOtpSchema = z.object({
+    phone: z.string().min(7),
+    mode: z.enum(['signin', 'signup']).optional().default('signin'),
+});
+
+const verifyPhoneOtpSchema = z.object({
+    phone: z.string().min(7),
+    code: z.string().regex(/^\d{6}$/),
+});
+
+const verifyPhoneRegisterSchema = verifyPhoneOtpSchema.extend({
+    name: z.string().min(2).max(120),
+    rememberMe: z.boolean().optional(),
+});
+
+type PendingPhoneOtp = {
+    codeHash: string;
+    expiresAt: number;
+    attempts: number;
+    mode: 'signin' | 'signup';
+};
+
+const pendingPhoneOtps = new Map<string, PendingPhoneOtp>();
+const PHONE_OTP_TTL_MS = 5 * 60 * 1000;
+const MAX_PHONE_OTP_ATTEMPTS = 5;
+const PHONE_OTP_DEBUG_ENABLED = process.env.NODE_ENV !== 'production' || process.env.PHONE_OTP_DEBUG === 'true';
+const PHONE_OTP_SECRET = process.env.PHONE_OTP_SECRET || 'acommerce-phone-otp-secret';
+
+const normalizePhoneNumber = (value: string): string => {
+    const digits = value.replace(/[^\d]/g, '');
+    return digits ? `+${digits}` : '';
+};
+
+const isValidPhoneNumber = (value: string): boolean => /^\+[1-9]\d{6,14}$/.test(value);
+
+const hashPhoneOtp = (phone: string, code: string): string => {
+    return crypto
+        .createHash('sha256')
+        .update(`${phone}:${code}:${PHONE_OTP_SECRET}`)
+        .digest('hex');
+};
+
+const cleanupExpiredPhoneOtps = () => {
+    const now = Date.now();
+    for (const [phone, otp] of pendingPhoneOtps.entries()) {
+        if (otp.expiresAt <= now) {
+            pendingPhoneOtps.delete(phone);
+        }
+    }
+};
+
+const createPhoneOtp = (phone: string, mode: 'signin' | 'signup'): string => {
+    const code = crypto.randomInt(100000, 1000000).toString();
+    pendingPhoneOtps.set(phone, {
+        codeHash: hashPhoneOtp(phone, code),
+        expiresAt: Date.now() + PHONE_OTP_TTL_MS,
+        attempts: 0,
+        mode,
+    });
+    return code;
+};
+
+const verifyStoredPhoneOtp = (phone: string, code: string, mode: 'signin' | 'signup') => {
+    cleanupExpiredPhoneOtps();
+
+    const pendingOtp = pendingPhoneOtps.get(phone);
+    if (!pendingOtp) {
+        return { ok: false, error: 'Verification code not found or expired' };
+    }
+
+    if (pendingOtp.mode !== mode) {
+        pendingPhoneOtps.delete(phone);
+        return { ok: false, error: 'Verification code is no longer valid for this action' };
+    }
+
+    if (pendingOtp.expiresAt <= Date.now()) {
+        pendingPhoneOtps.delete(phone);
+        return { ok: false, error: 'Verification code expired. Please request a new one.' };
+    }
+
+    if (pendingOtp.attempts >= MAX_PHONE_OTP_ATTEMPTS) {
+        pendingPhoneOtps.delete(phone);
+        return { ok: false, error: 'Too many failed attempts. Please request a new code.' };
+    }
+
+    if (pendingOtp.codeHash !== hashPhoneOtp(phone, code)) {
+        pendingOtp.attempts += 1;
+        pendingPhoneOtps.set(phone, pendingOtp);
+        return { ok: false, error: 'Invalid verification code' };
+    }
+
+    pendingPhoneOtps.delete(phone);
+    return { ok: true };
+};
+
+const buildPhoneIdentityEmail = (phone: string): string => {
+    const digits = phone.replace(/[^\d]/g, '');
+    return `phone.${digits}@acommerce.local`;
+};
+
+const generatePhoneAccountPassword = async (): Promise<string> => {
+    const rawPassword = `${crypto.randomBytes(18).toString('base64url')}Aa1!`;
+    return bcrypt.hash(rawPassword, 10);
+};
+
+const formatPhoneOtpResponse = (code: string) => {
+    const response: Record<string, unknown> = {
+        success: true,
+        expiresInSeconds: PHONE_OTP_TTL_MS / 1000,
+        message: PHONE_OTP_DEBUG_ENABLED
+            ? 'Verification code generated. Development mode is returning the OTP directly.'
+            : 'Verification code sent successfully.',
+    };
+
+    if (PHONE_OTP_DEBUG_ENABLED) {
+        response.debugCode = code;
+    }
+
+    return response;
+};
+
 const formatUserResponse = (user: any) => ({
     id: user.id,
     email: user.email,
@@ -227,6 +348,137 @@ export const googleAuth = async (req: Request, res: Response) => {
     } catch (error) {
         if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
         res.status(500).json({ error: 'Server error during OAuth' });
+    }
+};
+
+export const sendPhoneOtp = async (req: Request, res: Response) => {
+    try {
+        const { phone, mode } = sendPhoneOtpSchema.parse(req.body);
+        const normalizedPhone = normalizePhoneNumber(phone);
+
+        if (!isValidPhoneNumber(normalizedPhone)) {
+            return res.status(400).json({ error: 'Please provide a valid phone number with country code.' });
+        }
+
+        if (!PHONE_OTP_DEBUG_ENABLED) {
+            return res.status(503).json({ error: 'Phone OTP delivery is not configured on the server yet.' });
+        }
+
+        if (mode === 'signin') {
+            const existingUser = await prisma.user.findFirst({
+                where: { phone: normalizedPhone }
+            });
+
+            if (!existingUser) {
+                return res.status(404).json({ error: 'No account found for this phone number. Please sign up first.' });
+            }
+        } else {
+            const existingUser = await prisma.user.findFirst({
+                where: { phone: normalizedPhone }
+            });
+
+            if (existingUser) {
+                return res.status(400).json({ error: 'An account with this phone number already exists. Please sign in instead.' });
+            }
+        }
+
+        const code = createPhoneOtp(normalizedPhone, mode);
+        console.log(`[Phone OTP] ${normalizedPhone} (${mode}) => ${code}`);
+
+        res.json(formatPhoneOtpResponse(code));
+    } catch (error) {
+        console.error('Send phone OTP error:', error);
+        if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
+        res.status(500).json({ error: 'Failed to send verification code' });
+    }
+};
+
+export const verifyPhoneOtp = async (req: Request, res: Response) => {
+    try {
+        const { phone, code } = verifyPhoneOtpSchema.parse(req.body);
+        const normalizedPhone = normalizePhoneNumber(phone);
+
+        if (!isValidPhoneNumber(normalizedPhone)) {
+            return res.status(400).json({ error: 'Please provide a valid phone number with country code.' });
+        }
+
+        const verification = verifyStoredPhoneOtp(normalizedPhone, code, 'signin');
+        if (!verification.ok) {
+            return res.status(400).json({ error: verification.error });
+        }
+
+        const user = await prisma.user.findFirst({
+            where: { phone: normalizedPhone }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'No account found for this phone number. Please sign up first.' });
+        }
+
+        const token = generateToken(user.id, user.role);
+        res.json({
+            token,
+            user: formatUserResponse(user),
+            message: 'Phone login successful'
+        });
+    } catch (error) {
+        console.error('Verify phone OTP error:', error);
+        if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
+        res.status(500).json({ error: 'Phone verification failed' });
+    }
+};
+
+export const verifyPhoneRegister = async (req: Request, res: Response) => {
+    try {
+        const { phone, code, name } = verifyPhoneRegisterSchema.parse(req.body);
+        const normalizedPhone = normalizePhoneNumber(phone);
+
+        if (!isValidPhoneNumber(normalizedPhone)) {
+            return res.status(400).json({ error: 'Please provide a valid phone number with country code.' });
+        }
+
+        const verification = verifyStoredPhoneOtp(normalizedPhone, code, 'signup');
+        if (!verification.ok) {
+            return res.status(400).json({ error: verification.error });
+        }
+
+        const existingUser = await prisma.user.findFirst({
+            where: { phone: normalizedPhone }
+        });
+        if (existingUser) {
+            return res.status(400).json({ error: 'An account with this phone number already exists. Please sign in instead.' });
+        }
+
+        const syntheticEmail = buildPhoneIdentityEmail(normalizedPhone);
+        const existingSyntheticUser = await prisma.user.findFirst({
+            where: { email: { equals: syntheticEmail } }
+        });
+        if (existingSyntheticUser) {
+            return res.status(400).json({ error: 'A phone-based account already exists for this number. Please sign in instead.' });
+        }
+
+        const user = await prisma.user.create({
+            data: {
+                email: syntheticEmail,
+                password: await generatePhoneAccountPassword(),
+                name: name.trim(),
+                phone: normalizedPhone,
+                phoneVerified: true,
+                isVerified: true,
+                emailVerified: false
+            }
+        });
+
+        const token = generateToken(user.id, user.role);
+        res.json({
+            token,
+            user: formatUserResponse(user),
+            message: 'Phone registration successful'
+        });
+    } catch (error) {
+        console.error('Verify phone registration error:', error);
+        if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
+        res.status(500).json({ error: 'Phone registration failed' });
     }
 };
 
@@ -397,6 +649,11 @@ export const verifyPhone = async (req: AuthRequest, res: Response) => {
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
         const { phone, code } = phoneVerificationSchema.parse(req.body);
+        const normalizedPhone = normalizePhoneNumber(phone);
+
+        if (!isValidPhoneNumber(normalizedPhone)) {
+            return res.status(400).json({ error: 'Please provide a valid phone number with country code.' });
+        }
 
         // In production, verify the code with Firebase
         // For now, we accept any 6-digit code in development mode
@@ -407,7 +664,7 @@ export const verifyPhone = async (req: AuthRequest, res: Response) => {
             const user = await prisma.user.update({
                 where: { id: userId },
                 data: {
-                    phone: phone,
+                    phone: normalizedPhone,
                     phoneVerified: true,
                     isVerified: true
                 }

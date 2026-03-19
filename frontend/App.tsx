@@ -15,6 +15,7 @@ const StoreAdmin = lazy(() => import('./pages/StoreAdmin').then((module) => ({ d
 const StoreFront = lazy(() => import('./pages/StoreFront').then((module) => ({ default: module.StoreFront })));
 const PlatformAdmin = lazy(() => import('./pages/PlatformAdmin').then((module) => ({ default: module.PlatformAdmin })));
 const UserProfile = lazy(() => import('./pages/UserProfile').then((module) => ({ default: module.UserProfile })));
+const Subscription = lazy(() => import('./pages/Subscription').then((module) => ({ default: module.default })));
 const Marketplace = lazy(() => import('./pages/Marketplace'));
 const Auth = lazy(() => import('./pages/Auth').then((module) => ({ default: module.Auth })));
 const Verification = lazy(() => import('./pages/Verification').then((module) => ({ default: module.Verification })));
@@ -78,6 +79,12 @@ const VerificationWrapper: React.FC<{ user: User | null }> = ({ user }) => {
   return <Verification />;
 };
 
+const SubscriptionWrapper: React.FC<{ user: User | null }> = ({ user: _user }) => {
+  if (!_user) return <Navigate to="/login" replace />;
+  if (!isFullyVerified(_user)) return <Navigate to="/verify" replace />;
+  return <Subscription />;
+};
+
 const queryClient = new QueryClient();
 
 const RouteLoader: React.FC = () => (
@@ -109,6 +116,7 @@ const AppRoutes = () => {
         <Route path="/dashboard" element={<DashboardWrapper user={user} onLogout={logout} />} />
         <Route path="/admin" element={<PlatformAdminWrapper user={user} onLogout={logout} />} />
         <Route path="/profile" element={<UserProfileWrapper user={user} />} />
+        <Route path="/subscription" element={<SubscriptionWrapper user={user} />} />
         <Route path="/store/:storeId/admin/*" element={<StoreAdminWrapper user={user} />} />
 
         {/* Public Shop Routes */}

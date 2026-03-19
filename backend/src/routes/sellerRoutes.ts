@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import * as sellerController from '../controllers/sellerController';
+import * as followerController from '../controllers/followerController';
 
 const router = Router();
 
@@ -37,5 +38,31 @@ router.get('/onboarding-status', sellerController.getOnboardingStatus);
 
 // POST /api/seller/refresh-link - Refresh expired account link
 router.post('/refresh-link', sellerController.refreshAccountLink);
+
+// ==================== Follower System Routes ====================
+
+// POST /api/seller/follow - Follow a seller/store
+router.post('/follow', followerController.followSeller);
+
+// POST /api/seller/unfollow - Unfollow a seller/store
+router.post('/unfollow', followerController.unfollowSeller);
+
+// GET /api/seller/following/:storeId - Check if user is following a store
+router.get('/following/:storeId', followerController.checkFollowing);
+
+// GET /api/seller/followers/count/:storeId - Get follower count for a store
+router.get('/followers/count/:storeId', followerController.getFollowerCount);
+
+// GET /api/seller/followers/:storeId - Get followers list for a store (owner only)
+router.get('/followers/:storeId', followerController.getStoreFollowers);
+
+// GET /api/seller/following - Get stores user is following
+router.get('/following', followerController.getFollowingStores);
+
+// GET /api/seller/analytics/followers/:storeId - Get follower analytics for seller's dashboard
+router.get('/analytics/followers/:storeId', followerController.getFollowerAnalytics);
+
+// GET /api/seller/tier/:storeId - Get seller tier information
+router.get('/tier/:storeId', followerController.getSellerTier);
 
 export default router;

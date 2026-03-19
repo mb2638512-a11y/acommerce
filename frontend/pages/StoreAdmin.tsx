@@ -6,6 +6,7 @@ import { useAuth } from '../src/context/AuthContext';
 import { generateProductDescription, generateMarketingContent, generateSEOData, generatePriceSuggestion, generateBlogPost, generateRelatedProducts } from '../services/geminiService';
 import { ThemeToggle } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
+import { getFollowerAnalytics, getSellerTier } from '../services/sellerService';
 import {
     LayoutDashboard, Package, Settings, ArrowLeft, Users, ShoppingCart,
     Plus, Trash2, Search, Sparkles, Loader2, Image as ImageIcon,
@@ -106,15 +107,15 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
     const [aiSentimentInput, setAiSentimentInput] = useState('');
     const [aiSentimentResult, setAiSentimentResult] = useState<any>(null);
     const [isAnalyzingSentiment, setIsAnalyzingSentiment] = useState(false);
-    
+
     const [aiTranslateText, setAiTranslateText] = useState('');
     const [aiTargetLang, setAiTargetLang] = useState('Spanish');
     const [aiTranslateResult, setAiTranslateResult] = useState('');
     const [isTranslating, setIsTranslating] = useState(false);
-    
+
     const [aiSegmentationResult, setAiSegmentationResult] = useState<any>(null);
     const [isSegmenting, setIsSegmenting] = useState(false);
-    
+
     const [aiRecommendationResult, setAiRecommendationResult] = useState<any>(null);
     const [isGeneratingRecs, setIsGeneratingRecs] = useState(false);
 
@@ -176,6 +177,51 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
             return res.data;
         },
         enabled: !!user
+    });
+
+    // --- Follower Analytics Query ---
+    const { data: followerAnalytics } = useQuery({
+        queryKey: ['followerAnalytics', storeId],
+        queryFn: async () => {
+            const res = await api.get(`/seller/analytics/followers/${storeId}?period=30d`);
+            return res.data as {
+                totalFollowers: number;
+                periodStats: {
+                    newFollowers: number;
+                    unfollowers: number;
+                    netGrowth: number;
+                    retentionRate: number;
+                };
+                analytics: Array<{
+                    date: string;
+                    totalFollowers: number;
+                    newFollowers: number;
+                    unfollowers: number;
+                }>;
+            };
+        },
+        enabled: !!user && !!storeId
+    });
+
+    // --- Seller Tier Query ---
+    const { data: sellerTier } = useQuery({
+        queryKey: ['sellerTier', storeId],
+        queryFn: async () => {
+            const res = await api.get(`/seller/tier/${storeId}`);
+            return res.data as {
+                tierLevel: string;
+                subscriberCount: number;
+                trustScore: number;
+                retentionRate: number;
+                features: string[];
+                nextTier: {
+                    name: string;
+                    required: number;
+                    benefits: string[];
+                } | null;
+            };
+        },
+        enabled: !!user && !!storeId
     });
 
     const loadStore = () => {
@@ -618,9 +664,9 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
         if (!aiTranslateText) return;
         setIsTranslating(true);
         try {
-            const res = await api.post('/ai/translate', { 
-                text: aiTranslateText, 
-                targetLanguage: aiTargetLang 
+            const res = await api.post('/ai/translate', {
+                text: aiTranslateText,
+                targetLanguage: aiTargetLang
             });
             setAiTranslateResult(res.data.translatedText);
             showToast('Translation complete', 'success');
@@ -647,7 +693,7 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
     const handleGetRecommendations = async () => {
         setIsGeneratingRecs(true);
         try {
-            const res = await api.post('/ai/recommendations', { 
+            const res = await api.post('/ai/recommendations', {
                 categories: Array.from(new Set(store.products.map(p => p.category))),
                 limit: 5
             });
@@ -688,8 +734,8 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
                         </button>
                         <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden text-gray-500"><X size={20} /></button>
                     </div>
-                    
-                    <StoreSwitcher 
+
+                    <StoreSwitcher
                         stores={myStores}
                         activeStoreId={storeId}
                         onSelect={(id) => onNavigate(`/store/${id}/admin`)}
@@ -778,12 +824,13 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
                             </div>
 
                             {/* Stats Grid */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
                                 {[
-                                    { label: 'Total Revenue', val: `$${totalRevenue.toFixed(2)}`, icon: DollarSign, color: 'green', change: '+12%' },
+                                    { label: 'Total Revenue', val: `${totalRevenue.toFixed(2)}`, icon: DollarSign, color: 'green', change: '+12%' },
                                     { label: 'Total Orders', val: totalOrders, icon: ShoppingCart, color: 'blue', change: '+5%' },
-                                    { label: 'Avg Order Value', val: `$${avgOrderValue.toFixed(2)}`, icon: TrendingUp, color: 'purple', change: '0%' },
-                                    { label: 'Fulfillment Rate', val: `${fulfillmentRate.toFixed(0)}%`, icon: Box, color: 'orange', change: '+2%' }
+                                    { label: 'Avg Order Value', val: `${avgOrderValue.toFixed(2)}`, icon: TrendingUp, color: 'purple', change: '0%' },
+                                    { label: 'Fulfillment Rate', val: `${fulfillmentRate.toFixed(0)}%`, icon: Box, color: 'orange', change: '+2%' },
+                                    { label: 'Subscribers', val: (followerAnalytics?.totalFollowers ?? 0).toString(), icon: Users, color: 'indigo', change: followerAnalytics ? `${followerAnalytics.periodStats.netGrowth >= 0 ? '+' : ''}${followerAnalytics.periodStats.netGrowth}` : '0' }
                                 ].map((stat, i) => (
                                     <div key={i} className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 hover:shadow-md transition-shadow">
                                         <div className="flex justify-between items-start mb-4">
@@ -797,6 +844,43 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
                                     </div>
                                 ))}
                             </div>
+
+                            {/* Seller Tier & Follower Insights */}
+                            {sellerTier && (
+                                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 border border-indigo-200 dark:border-indigo-800 rounded-2xl p-6">
+                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+                                        <div>
+                                            <h3 className="text-lg font-bold text-indigo-700 dark:text-indigo-400 flex items-center gap-2">
+                                                <Award size={20} />
+                                                Seller Tier: {sellerTier.tierLevel.replace('_', ' ')}
+                                            </h3>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                Trust Score: {sellerTier.trustScore}% • Retention Rate: {sellerTier.retentionRate}%
+                                            </p>
+                                        </div>
+                                        {sellerTier.nextTier && (
+                                            <div className="text-right">
+                                                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                                                    {sellerTier.nextTier.required - (followerAnalytics?.totalFollowers || 0)} more followers to {sellerTier.nextTier.name.replace('_', ' ')}
+                                                </p>
+                                                <div className="w-32 h-2 bg-gray-200 dark:bg-gray-700 rounded-full mt-1 overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-indigo-600 rounded-full"
+                                                        style={{ width: `${Math.min(100, ((followerAnalytics?.totalFollowers || 0) / sellerTier.nextTier.required) * 100)}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {sellerTier.features?.map((feature: string, idx: number) => (
+                                            <span key={idx} className="px-3 py-1 bg-white dark:bg-gray-800 text-xs font-medium text-indigo-600 dark:text-indigo-400 rounded-full border border-indigo-200 dark:border-indigo-700">
+                                                {feature.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Low Stock Alerts */}
                             {store.products?.filter(p => p.trackQuantity && p.stock <= 5).length > 0 && (
@@ -1709,10 +1793,9 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
                                     {aiSentimentResult && (
                                         <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
                                             <div className="flex justify-between items-center mb-2">
-                                                <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${
-                                                    aiSentimentResult.sentiment === 'positive' ? 'bg-green-100 text-green-700' :
+                                                <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${aiSentimentResult.sentiment === 'positive' ? 'bg-green-100 text-green-700' :
                                                     aiSentimentResult.sentiment === 'negative' ? 'bg-red-100 text-red-700' : 'bg-gray-200 text-gray-700'
-                                                }`}>
+                                                    }`}>
                                                     {aiSentimentResult.sentiment}
                                                 </span>
                                                 <span className="text-xs font-bold text-gray-500">Score: {aiSentimentResult.score}</span>
@@ -1758,7 +1841,7 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
                                     {aiTranslateResult && (
                                         <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
                                             <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{aiTranslateResult}</p>
-                                            <button 
+                                            <button
                                                 onClick={() => { navigator.clipboard.writeText(aiTranslateResult); showToast('Copied to clipboard', 'success'); }}
                                                 className="mt-2 text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
                                             >
@@ -1790,7 +1873,7 @@ export const StoreAdmin: React.FC<StoreAdminProps> = ({ storeId, onNavigate }) =
                                     {aiSegmentationResult ? (
                                         <div className="space-y-4">
                                             {aiSegmentationResult.segments.map((segment: any, i: number) => (
-                                                <div key={ segment.name } className="p-4 border border-gray-100 dark:border-gray-800 rounded-2xl bg-gray-50 dark:bg-gray-800/50">
+                                                <div key={segment.name} className="p-4 border border-gray-100 dark:border-gray-800 rounded-2xl bg-gray-50 dark:bg-gray-800/50">
                                                     <div className="flex justify-between items-start mb-2">
                                                         <h4 className="font-bold text-gray-900 dark:text-white">{segment.name}</h4>
                                                         <span className="text-xs font-bold px-2 py-0.5 bg-white dark:bg-gray-700 rounded-full border border-gray-200 dark:border-gray-600">{segment.size} customers</span>

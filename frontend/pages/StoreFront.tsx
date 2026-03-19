@@ -7,11 +7,12 @@ import { useAuth } from '../src/context/AuthContext';
 import { ThemeToggle } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import { useCurrency } from '../context/CurrencyContext';
+import { followSeller, unfollowSeller, checkFollowing } from '../services/sellerService';
 import {
     ShoppingCart, Search, X, Star, ArrowRight, Mail, Facebook, Twitter, Instagram, MapPin, Menu,
     Lock, Eye, Copy, Minus, Plus, Loader2, LayoutDashboard, Calendar, Clock, Heart, Filter,
     ChevronDown, ChevronRight, User as UserIcon, LogOut, Package, Truck, AlertCircle, Share2, Check,
-    ArrowLeft, Image as ImageIcon, Maximize2, XCircle, SlidersHorizontal, ChevronUp, ChevronLeft, Zap, ShoppingBag
+    ArrowLeft, Image as ImageIcon, Maximize2, XCircle, SlidersHorizontal, ChevronUp, ChevronLeft, Zap, ShoppingBag, Users
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { CheckoutStep } from '../types';
@@ -1148,6 +1149,36 @@ export const StoreFront: React.FC<StoreFrontProps> = ({ storeId, onNavigate }) =
         enabled: !!currentUser?.email
     });
 
+    // Follow Status Query
+    const { data: followData, refetch: refetchFollowStatus } = useQuery({
+        queryKey: ['followStatus', storeId],
+        queryFn: async () => {
+            const res = await api.get(`/seller/following/${storeId}`);
+            return res.data as { following: boolean; followerCount: number };
+        },
+        enabled: !!storeId && !!currentUser
+    });
+
+    // Follow/Unfollow Mutation
+    const followMutation = useMutation({
+        mutationFn: async (action: 'follow' | 'unfollow') => {
+            if (action === 'follow') {
+                const res = await api.post('/seller/follow', { storeId });
+                return res.data;
+            } else {
+                const res = await api.post('/seller/unfollow', { storeId });
+                return res.data;
+            }
+        },
+        onSuccess: () => {
+            refetchFollowStatus();
+            showToast(followData?.following ? 'Unfollowed store' : 'Now following this store', 'success');
+        },
+        onError: () => {
+            showToast('Failed to update follow status', 'error');
+        }
+    });
+
     const userWishlist = customerProfile?.wishlist || [];
 
     // Currency Context
@@ -1455,12 +1486,38 @@ export const StoreFront: React.FC<StoreFrontProps> = ({ storeId, onNavigate }) =
                 <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-12 lg:gap-20 mb-20">
                         <div className="md:col-span-5">
-                            <Link to={`/store/${storeId}`} className="flex items-center gap-3 mb-8 group inline-flex">
+                            <Link to={`/store/${storeId}`} className="flex items-center gap-3 mb-4 group inline-flex">
                                 <div className={`w-12 h-12 rounded-xl bg-gradient-to-br from-${store.themeColor}-500 to-${store.themeColor}-700 flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-${store.themeColor}-500/20`}>
                                     {store.name.charAt(0)}
                                 </div>
                                 <span className="font-black text-3xl tracking-tight">{store.name}</span>
                             </Link>
+
+                            {/* Follow Button and Subscriber Count */}
+                            {!isOwner && currentUser && (
+                                <div className="mb-6">
+                                    <button
+                                        onClick={() => followMutation.mutate(followData?.following ? 'unfollow' : 'follow')}
+                                        disabled={followMutation.isPending}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm transition-all ${followData?.following
+                                            ? 'bg-gray-700 text-white hover:bg-gray-600'
+                                            : `bg-${store.themeColor}-600 text-white hover:bg-${store.themeColor}-500`
+                                            }`}
+                                    >
+                                        {followData?.following ? (
+                                            <><Check size={16} /> Following</>
+                                        ) : (
+                                            <><Users size={16} /> Follow</>
+                                        )}
+                                    </button>
+                                    {followData?.followerCount !== undefined && (
+                                        <span className="ml-3 text-sm text-gray-400">
+                                            {followData.followerCount} {followData.followerCount === 1 ? 'follower' : 'followers'}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+
                             <p className="text-gray-400 mb-8 max-w-sm text-lg leading-relaxed font-medium">{store.description || 'A premium e-commerce experience curated for those who demand excellence.'}</p>
                             <div className="flex gap-4">
                                 {store.settings.socialLinks?.facebook && <a href={store.settings.socialLinks.facebook} className="w-12 h-12 bg-white/5 hover:bg-white/15 hover:scale-110 transition-all rounded-full flex items-center justify-center border border-white/10"><Facebook size={20} /></a>}

@@ -27,6 +27,7 @@ import moderationRoutes from './routes/moderationRoutes';
 import ratingRoutes from './routes/ratingRoutes';
 import disputeRoutes from './routes/disputeRoutes';
 import platformStatsRoutes from './routes/platformStatsRoutes';
+import promoRoutes from './routes/promoRoutes';
 
 import prisma from './utils/prisma';
 import { env, isProduction } from './config/env';
@@ -83,6 +84,7 @@ app.use('/api/moderation', moderationRoutes);
 app.use('/api/ratings', ratingRoutes);
 app.use('/api/disputes', disputeRoutes);
 app.use('/api/platform', platformStatsRoutes);
+app.use('/api/promo', promoRoutes);
 app.use('/api', storeLimitsRoutes);
 
 

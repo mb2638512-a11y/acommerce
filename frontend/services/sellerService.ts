@@ -187,6 +187,151 @@ export const getCommissionRateDisplay = (rate: number): string => {
  return `${(rate * 100).toFixed(0)}%`;
 };
 
+// ==================== Follower System API ====================
+
+interface FollowerInfo {
+ followerId: string;
+ name: string;
+ email: string;
+ avatar: string | null;
+ followedAt: string;
+}
+
+interface FollowerAnalyticsData {
+ totalFollowers: number;
+ periodStats: {
+  newFollowers: number;
+  unfollowers: number;
+  netGrowth: number;
+  retentionRate: number;
+ };
+ analytics: Array<{
+  date: string;
+  totalFollowers: number;
+  newFollowers: number;
+  unfollowers: number;
+ }>;
+ demographics: {
+  last30Days: number;
+  last60Days: number;
+  older: number;
+ };
+}
+
+interface SellerTierInfo {
+ tierLevel: string;
+ subscriberCount: number;
+ trustScore: number;
+ retentionRate: number;
+ features: string[];
+ nextTier: {
+  name: string;
+  required: number;
+  benefits: string[];
+ } | null;
+}
+
+interface FollowingStore {
+ storeId: string;
+ storeName: string;
+ storeSlug: string;
+ storeDescription: string | null;
+ themeColor: string | null;
+ followerCount: number;
+ followedAt: string;
+}
+
+// Follow a seller/store
+export const followSeller = async (storeId: string): Promise<{
+ success: boolean;
+ following: boolean;
+ followerCount: number;
+}> => {
+ return fetchApi('/seller/follow', {
+  method: 'POST',
+  body: JSON.stringify({ storeId }),
+ });
+};
+
+// Unfollow a seller/store
+export const unfollowSeller = async (storeId: string): Promise<{
+ success: boolean;
+ following: boolean;
+ followerCount: number;
+}> => {
+ return fetchApi('/seller/unfollow', {
+  method: 'POST',
+  body: JSON.stringify({ storeId }),
+ });
+};
+
+// Check if user is following a store
+export const checkFollowing = async (storeId: string): Promise<{
+ following: boolean;
+ followerCount: number;
+}> => {
+ return fetchApi(`/seller/following/${storeId}`);
+};
+
+// Get follower count for a store
+export const getFollowerCount = async (storeId: string): Promise<{ followerCount: number }> => {
+ return fetchApi(`/seller/followers/count/${storeId}`);
+};
+
+// Get followers list for a store (owner only)
+export const getStoreFollowers = async (
+ storeId: string,
+ page: number = 1,
+ limit: number = 20
+): Promise<{
+ followers: FollowerInfo[];
+ pagination: {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+ };
+}> => {
+ const params = new URLSearchParams({
+  page: page.toString(),
+  limit: limit.toString(),
+ });
+ return fetchApi(`/seller/followers/${storeId}?${params}`);
+};
+
+// Get stores user is following
+export const getFollowingStores = async (
+ page: number = 1,
+ limit: number = 20
+): Promise<{
+ following: FollowingStore[];
+ pagination: {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+ };
+}> => {
+ const params = new URLSearchParams({
+  page: page.toString(),
+  limit: limit.toString(),
+ });
+ return fetchApi(`/seller/following?${params}`);
+};
+
+// Get follower analytics for seller's dashboard
+export const getFollowerAnalytics = async (
+ storeId: string,
+ period: string = '30d'
+): Promise<FollowerAnalyticsData> => {
+ return fetchApi(`/seller/analytics/followers/${storeId}?period=${period}`);
+};
+
+// Get seller tier information
+export const getSellerTier = async (storeId: string): Promise<SellerTierInfo> => {
+ return fetchApi(`/seller/tier/${storeId}`);
+};
+
 export default {
  onboardSeller,
  getSellerStatus,
@@ -199,4 +344,13 @@ export default {
  formatDate,
  getStatusColor,
  getCommissionRateDisplay,
+ // Follower functions
+ followSeller,
+ unfollowSeller,
+ checkFollowing,
+ getFollowerCount,
+ getStoreFollowers,
+ getFollowingStores,
+ getFollowerAnalytics,
+ getSellerTier,
 };

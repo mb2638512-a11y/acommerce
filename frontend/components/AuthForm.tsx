@@ -13,13 +13,11 @@ import {
  Sparkles,
  CheckCircle2,
  ArrowLeft,
- KeyRound,
  Phone,
  MessageSquare,
  Timer,
  RefreshCw,
  Check,
- X,
  AlertTriangle
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
@@ -28,19 +26,13 @@ import api from '../src/lib/api';
 import { useNavigate } from 'react-router-dom';
 import { auth, googleProvider, firebaseInitialized } from '../src/lib/firebase';
 import {
- signInWithEmailAndPassword as firebaseSignIn,
- createUserWithEmailAndPassword as firebaseCreateUser,
  sendPasswordResetEmail as firebaseSendPasswordResetEmail,
- signInWithPopup as firebaseSignInWithPopup,
- signInWithPhoneNumber,
- RecaptchaVerifier
+ signInWithPopup as firebaseSignInWithPopup
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { supabase } from '../src/lib/supabase';
 import { USE_FIREBASE } from '../src/lib/config';
 import { getPostLoginRoute } from '../src/lib/adminAccess';
 import { User } from '../types';
-import { getRecaptchaToken } from '../services/recaptchaService';
 
 // Types
 type AuthMode = 'signin' | 'signup' | 'forgot_password';
@@ -64,6 +56,13 @@ const passwordRequirements: PasswordRequirement[] = [
  { label: 'One number', test: (p) => /[0-9]/.test(p) },
  { label: 'One special character', test: (p) => /[^a-zA-Z0-9]/.test(p) },
 ];
+
+const normalizePhoneNumber = (value: string) => {
+ const digits = value.replace(/[^\d]/g, '');
+ return digits ? `+${digits}` : '';
+};
+
+const isValidPhoneNumber = (value: string) => /^\+[1-9]\d{6,14}$/.test(normalizePhoneNumber(value));
 
 // Reusable Input Component
 const InputField: React.FC<{
@@ -256,7 +255,6 @@ export const AuthForm: React.FC = () => {
  const [verificationStep, setVerificationStep] = useState<VerificationStep>('input');
  const [phone, setPhone] = useState('');
  const [otp, setOtp] = useState('');
- const [confirmationResult, setConfirmationResult] = useState<any>(null);
  const [otpTimer, setOtpTimer] = useState(0);
  const [resendDisabled, setResendDisabled] = useState(false);
 
@@ -271,7 +269,6 @@ export const AuthForm: React.FC = () => {
  const [agreeTerms, setAgreeTerms] = useState(false);
 
  // UI State
- const [showPassword, setShowPassword] = useState(false);
  const [loading, setLoading] = useState(false);
  const [mounted, setMounted] = useState(false);
 
@@ -329,10 +326,11 @@ export const AuthForm: React.FC = () => {
     if (password !== confirmPassword) newErrors.confirmPassword = 'Passwords do not match';
    }
   } else {
-   if (!phone) {
+   const normalizedPhone = normalizePhoneNumber(phone);
+   if (!normalizedPhone) {
     newErrors.phone = 'Phone number is required';
-   } else if (!/^\+?[1-9]\d{6,14}$/.test(phone.replace(/\s/g, ''))) {
-    newErrors.phone = 'Please enter a valid phone number';
+   } else if (!isValidPhoneNumber(phone)) {
+    newErrors.phone = 'Please enter a valid phone number with country code';
    }
   }
 
@@ -343,6 +341,12 @@ export const AuthForm: React.FC = () => {
  // Email Submit Handler
  const handleEmailSubmit = (e: React.FormEvent) => {
   e.preventDefault();
+
+  if (authMethod === 'phone') {
+   if (!validateForm()) return;
+   void handleSendOTP();
+   return;
+  }
 
   if (authMethod === 'email') {
    if (!email) {
@@ -367,13 +371,6 @@ export const AuthForm: React.FC = () => {
   if (!email) return showToast("Email is required", "error");
   setLoading(true);
   try {
-   let recaptchaToken: string | null = null;
-   try {
-    recaptchaToken = await getRecaptchaToken('FORGOT_PASSWORD');
-   } catch (recaptchaError) {
-    console.warn('reCAPTCHA failed, continuing without it:', recaptchaError);
-   }
-
    try {
     if (USE_FIREBASE && firebaseInitialized && auth) {
      await firebaseSendPasswordResetEmail(auth, email);
@@ -445,6 +442,8 @@ export const AuthForm: React.FC = () => {
    console.error('Google Auth Error:', error);
    const message = error.code === 'auth/popup-blocked'
     ? 'Sign-in popup was blocked. Please allow popups for this site.'
+    : error.code === 'auth/unauthorized-domain'
+     ? 'This domain is not approved for Firebase sign-in. Use email or phone authentication instead.'
     : error.code === 'auth/configuration-not-found'
      ? 'Google sign-in is being configured. Please use email sign-in.'
      : error.message || 'Google sign-in failed.';
@@ -461,8 +460,8 @@ export const AuthForm: React.FC = () => {
    return;
   }
 
-  const cleanPhone = phone.replace(/\s/g, '');
-  if (!/^\+?[1-9]\d{6,14}$/.test(cleanPhone)) {
+  const cleanPhone = normalizePhoneNumber(phone);
+  if (!isValidPhoneNumber(cleanPhone)) {
    setErrors({ phone: 'Please enter a valid phone number with country code' });
    return;
   }
@@ -471,29 +470,25 @@ export const AuthForm: React.FC = () => {
   setErrors({});
 
   try {
-   if (USE_FIREBASE && firebaseInitialized && auth) {
-    // Setup recaptcha
-    const recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-     size: 'invisible',
-    });
+   const response = await api.post('/auth/send-phone-otp', {
+    phone: cleanPhone,
+    mode
+   });
 
-    const result = await signInWithPhoneNumber(auth, phone, recaptchaVerifier);
-    setConfirmationResult(result);
+   if (response.data.success) {
+    setPhone(cleanPhone);
+    setOtp('');
     setVerificationStep('verify');
     setOtpTimer(60);
-    showToast('Verification code sent to your phone!', 'success');
-   } else {
-    // Fallback to backend API
-    const response = await api.post('/auth/send-phone-otp', { phone: cleanPhone });
-    if (response.data.success) {
-     setVerificationStep('verify');
-     setOtpTimer(60);
-     showToast('Verification code sent to your phone!', 'success');
-    }
+    const message = response.data.debugCode
+     ? `Verification code generated. Use ${response.data.debugCode} to continue.`
+     : response.data.message || 'Verification code sent to your phone!';
+    showToast(message, response.data.debugCode ? 'info' : 'success');
    }
   } catch (error: any) {
    console.error('OTP Send Error:', error);
-   showToast(error.message || 'Failed to send verification code', 'error');
+   const message = error?.response?.data?.error || error.message || 'Failed to send verification code';
+   showToast(message, 'error');
   } finally {
    setLoading(false);
   }
@@ -518,39 +513,26 @@ export const AuthForm: React.FC = () => {
   setErrors({});
 
   try {
-   if (USE_FIREBASE && firebaseInitialized && confirmationResult) {
-    const result = await confirmationResult.confirm(otp);
+   const response = await api.post('/auth/verify-phone-otp', {
+    phone: normalizePhoneNumber(phone),
+    code: otp
+   });
 
-    // Sync with backend
-    const response = await api.post('/auth/phone-login', {
-     phone: phone,
-     uid: result.user.uid
-    });
+   if (response.data.token) {
+    login(response.data.token, response.data.user);
+   }
 
-    if (response.data.token) {
-     login(response.data.token, response.data.user);
-    }
-
-    showToast('Logged in successfully!', 'success');
-    navigate(getPostLoginRoute(response.data.user as User));
+   showToast(response.data.message || 'Logged in successfully!', 'success');
+   if (response.data.user?.isVerified === false) {
+    navigate('/verify');
    } else {
-    // Backend verification fallback
-    const response = await api.post('/auth/verify-phone-otp', {
-     phone: phone,
-     code: otp
-    });
-
-    if (response.data.token) {
-     login(response.data.token, response.data.user);
-    }
-
-    showToast('Logged in successfully!', 'success');
     navigate(getPostLoginRoute(response.data.user as User));
    }
   } catch (error: any) {
    console.error('OTP Verify Error:', error);
-   setErrors({ otp: 'Invalid or expired verification code' });
-   showToast('Invalid verification code', 'error');
+   const message = error?.response?.data?.error || 'Invalid or expired verification code';
+   setErrors({ otp: message });
+   showToast(message, 'error');
   } finally {
    setLoading(false);
   }
@@ -569,7 +551,7 @@ export const AuthForm: React.FC = () => {
   try {
    // Verify OTP and create account
    const response = await api.post('/auth/verify-phone-register', {
-    phone: phone,
+    phone: normalizePhoneNumber(phone),
     code: otp,
     name: name.trim(),
     rememberMe: rememberMe
@@ -583,8 +565,9 @@ export const AuthForm: React.FC = () => {
    navigate('/verify');
   } catch (error: any) {
    console.error('Phone Register Error:', error);
-   setErrors({ otp: 'Invalid or expired verification code' });
-   showToast('Invalid verification code', 'error');
+   const message = error?.response?.data?.error || 'Invalid or expired verification code';
+   setErrors({ otp: message });
+   showToast(message, 'error');
   } finally {
    setLoading(false);
   }
@@ -592,26 +575,17 @@ export const AuthForm: React.FC = () => {
 
  // Final Email Submit Handler
  const handleFinalSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
+ e.preventDefault();
 
-  if (!validateForm()) return;
+ if (!validateForm()) return;
 
   setLoading(true);
   try {
-   let recaptchaToken: string | null = null;
-   const recaptchaAction = mode === 'signup' ? 'REGISTER' : 'LOGIN';
-   try {
-    recaptchaToken = await getRecaptchaToken(recaptchaAction);
-   } catch (recaptchaError) {
-    console.warn('reCAPTCHA failed:', recaptchaError);
-   }
-
    if (mode === 'signup') {
     const response = await api.post('/auth/register', {
      email: email.trim().toLowerCase(),
      password,
      name: name.trim(),
-     recaptchaToken
     });
 
     if (response.data.token) {
@@ -631,7 +605,6 @@ export const AuthForm: React.FC = () => {
     const response = await api.post('/auth/login', {
      email: email.trim().toLowerCase(),
      password,
-     recaptchaToken,
      rememberMe
     });
 
@@ -669,6 +642,10 @@ export const AuthForm: React.FC = () => {
   setStep(1);
   setPassword('');
   setConfirmPassword('');
+  setPhone('');
+  setOtp('');
+  setOtpTimer(0);
+  setResendDisabled(false);
   setRecoveryEmailSent(false);
   setVerificationEmailSent(false);
   setVerificationStep('input');
@@ -679,15 +656,11 @@ export const AuthForm: React.FC = () => {
  const switchAuthMethod = (method: AuthMethod) => {
   setAuthMethod(method);
   setStep(1);
+  setOtp('');
+  setOtpTimer(0);
+  setResendDisabled(false);
+  setVerificationStep('input');
   setErrors({});
- };
-
- // Format phone number
- const formatPhone = (value: string) => {
-  const cleaned = value.replace(/\D/g, '');
-  if (cleaned.length <= 3) return cleaned;
-  if (cleaned.length <= 6) return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3)}`;
-  return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`;
  };
 
  return (
@@ -943,25 +916,59 @@ export const AuthForm: React.FC = () => {
           </div>
          )}
 
+         {authMethod === 'phone' && mode === 'signup' && (
+          <InputField
+           icon={UserIcon}
+           type="text"
+           label="Full Enterprise Name"
+           value={name}
+           onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+            setName(e.target.value);
+            setErrors({ ...errors, name: '' });
+           }}
+           error={errors.name}
+          />
+         )}
+
+         {authMethod === 'phone' && mode === 'signup' && (
+          <div className="space-y-4">
+           <label className="flex items-start gap-3 cursor-pointer group">
+            <div className="relative mt-0.5">
+             <input
+              type="checkbox"
+              checked={agreeTerms}
+              onChange={(e) => {
+               setAgreeTerms(e.target.checked);
+               setErrors({ ...errors, terms: '' });
+              }}
+              className="sr-only peer"
+             />
+             <div className={`w-5 h-5 border-2 rounded-md transition-all flex items-center justify-center ${agreeTerms ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 dark:border-slate-600 group-hover:border-indigo-500'}`}>
+              {agreeTerms && <Check size={12} className="text-white" />}
+             </div>
+            </div>
+            <span className="text-xs text-slate-500">
+             I agree to the{' '}
+             <a href="/legal" className="text-indigo-500 hover:underline">Terms of Service</a>
+             {' '}and{' '}
+             <a href="/legal" className="text-indigo-500 hover:underline">Privacy Policy</a>
+            </span>
+           </label>
+           {errors.terms && (
+            <p className="text-xs font-medium text-red-500 flex items-center gap-1">
+             <AlertTriangle size={12} /> {errors.terms}
+            </p>
+           )}
+          </div>
+         )}
+
          <button
           type="submit"
           disabled={loading}
-          className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] shadow-xl shadow-indigo-600/30 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+          className={`w-full py-4 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 ${authMethod === 'phone' ? 'bg-purple-600 shadow-purple-600/30' : 'bg-indigo-600 shadow-indigo-600/30'}`}
          >
-          {loading ? <Loader2 className="animate-spin mx-auto" /> : <>Proceed to Authentication <ArrowRight size={16} /></>}
+          {loading ? <Loader2 className="animate-spin mx-auto" /> : authMethod === 'phone' ? <>Send Verification Code <MessageSquare size={16} /></> : <>Proceed to Authentication <ArrowRight size={16} /></>}
          </button>
-
-         {/* Phone: Send OTP Button */}
-         {authMethod === 'phone' && (
-          <button
-           type="button"
-           onClick={handleSendOTP}
-           disabled={loading}
-           className="w-full py-4 bg-purple-600 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] shadow-xl shadow-purple-600/30 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
-          >
-           {loading ? <Loader2 className="animate-spin mx-auto" /> : <>Send Verification Code <MessageSquare size={16} /></>}
-          </button>
-         )}
 
          <div className="relative flex items-center py-4">
           <div className="flex-grow border-t border-slate-200 dark:border-white/5"></div>
@@ -1129,9 +1136,6 @@ export const AuthForm: React.FC = () => {
         </div>
        )}
       </div>
-
-      {/* Hidden reCAPTCHA container */}
-      <div id="recaptcha-container" className="hidden"></div>
 
       <div className="mt-12 text-center text-[10px] font-black uppercase tracking-[0.3em] text-slate-400/50">
        Powered by Aureon Hyperstructure

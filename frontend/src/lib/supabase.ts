@@ -1,31 +1,8 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+// Supabase client stub - Firebase is the active auth provider
+// This file exists for compatibility with existing imports but always returns null
 
-// Only initialize Supabase when Firebase is NOT being used
-const USE_FIREBASE = import.meta.env.VITE_USE_FIREBASE === 'true';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const getSupabase = (): any => null;
 
-let supabaseInstance: SupabaseClient | null = null;
-
-export const getSupabase = (): SupabaseClient | null => {
-    // Skip Supabase initialization if Firebase is enabled
-    if (USE_FIREBASE) return null;
-    
-    if (supabaseInstance) return supabaseInstance;
-    
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-    
-    if (!supabaseUrl || !supabaseKey) {
-        return null;
-    }
-
-    try {
-        supabaseInstance = createClient(supabaseUrl, supabaseKey);
-        return supabaseInstance;
-    } catch (e) {
-        console.error('Supabase: Initialization failed.', e);
-        return null;
-    }
-};
-
-// Export singleton for ease of use, but consumers should handle null
-export const supabase = getSupabase();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const supabase: any = null;

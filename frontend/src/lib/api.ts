@@ -50,13 +50,17 @@ api.interceptors.request.use(async (config) => {
 });
 
 // Add response interceptor to handle auth errors
+// Don't auto-clear tokens on 401 - let the app handle it gracefully
 api.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response?.status === 401) {
-            // Token might be invalid, clear local storage
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
+            // Only clear tokens if this is NOT a login/register endpoint
+            const url = error.config?.url || '';
+            const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/google') || url.includes('/auth/verify');
+            if (!isAuthEndpoint) {
+                console.warn('API 401 on:', url, '- keeping token for retry');
+            }
         }
         return Promise.reject(error);
     }

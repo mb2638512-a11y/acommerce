@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { Order, Product, Store, PlanTier } from '../types';
+import { Order, Product, Store, PlanTier, TwoFactorSetup, TwoFactorStatus } from '../types';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../src/lib/api';
 import { useAuth } from '../src/context/AuthContext';
 import {
     User as UserIcon, Package, ArrowLeft, Mail, Calendar, Save, ShoppingBag, Store as StoreIcon,
     CreditCard, MapPin, Truck, MessageSquare, Star, Heart, Settings, LogOut, Clock, ShieldCheck,
-    ChevronRight, Bell, Gift, Headphones, Wallet, Ticket
+    ChevronRight, Bell, Gift, Headphones, Wallet, Ticket, Shield, X, Key, AlertTriangle
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { useNavigate } from 'react-router-dom';
@@ -77,6 +77,12 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onNavigate }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [name, setName] = useState(user?.name || '');
     const [activeTab, setActiveTab] = useState<'all' | 'unpaid' | 'processing' | 'shipped' | 'review'>('all');
+    // 2FA State
+    const [showTwoFactorModal, setShowTwoFactorModal] = useState(false);
+    const [twoFactorStep, setTwoFactorStep] = useState<'setup' | 'verify' | 'enabled'>('setup');
+    const [twoFactorSetupData, setTwoFactorSetupData] = useState<TwoFactorSetup | null>(null);
+    const [verificationCode, setVerificationCode] = useState('');
+    const [passwordFor2FA, setPasswordFor2FA] = useState('');
 
     const { showToast } = useToast();
     const navigate = useNavigate();
@@ -98,6 +104,56 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onNavigate }) => {
             return res.data;
         },
         enabled: !!user
+    });
+
+    // 2FA Queries and Mutations
+    const { data: twoFactorStatus } = useQuery({
+        queryKey: ['twoFactorStatus'],
+        queryFn: async () => {
+            const res = await api.get<TwoFactorStatus>('/auth/2fa/status');
+            return res.data;
+        },
+        enabled: !!user
+    });
+
+    const setupTwoFactorMutation = useMutation({
+        mutationFn: (data: { password: string }) => api.post<TwoFactorSetup>('/auth/2fa/setup', data),
+        onSuccess: (data) => {
+            setTwoFactorSetupData(data.data);
+            setTwoFactorStep('verify');
+            showToast('2FA secret generated. Please verify with your authenticator app.', 'success');
+        },
+        onError: (error: any) => {
+            showToast(error.response?.data?.error || 'Failed to setup 2FA', 'error');
+        }
+    });
+
+    const verifyTwoFactorMutation = useMutation({
+        mutationFn: (data: { code: string }) => api.post('/auth/2fa/verify', data),
+        onSuccess: () => {
+            setTwoFactorStep('enabled');
+            queryClient.invalidateQueries({ queryKey: ['twoFactorStatus'] });
+            showToast('Two-factor authentication enabled successfully!', 'success');
+        },
+        onError: (error: any) => {
+            showToast(error.response?.data?.error || 'Failed to verify 2FA', 'error');
+        }
+    });
+
+    const disableTwoFactorMutation = useMutation({
+        mutationFn: (data: { password: string; code?: string }) => api.post('/auth/2fa/disable', data),
+        onSuccess: () => {
+            setShowTwoFactorModal(false);
+            setTwoFactorStep('setup');
+            setTwoFactorSetupData(null);
+            setPasswordFor2FA('');
+            setVerificationCode('');
+            queryClient.invalidateQueries({ queryKey: ['twoFactorStatus'] });
+            showToast('Two-factor authentication disabled.', 'success');
+        },
+        onError: (error: any) => {
+            showToast(error.response?.data?.error || 'Failed to disable 2FA', 'error');
+        }
     });
 
     const updateProfileMutation = useMutation({
@@ -160,6 +216,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onNavigate }) => {
     }, [myStores, user.role]);
 
     return (
+        <>
         <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-20">
             {/* Header / Profile Card */}
             <div className="bg-gradient-to-r from-indigo-600 to-purple-600 pt-12 pb-24 px-4 rounded-b-[2.5rem] shadow-xl relative overflow-hidden">
@@ -274,6 +331,13 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onNavigate }) => {
                         <ServiceCard icon={MapPin} label="Address" desc="Manage shipping" color="bg-blue-500" />
                         <ServiceCard icon={Headphones} label="Support" desc="24/7 Help" color="bg-green-500" />
                         <ServiceCard icon={Clock} label="History" desc="Recently viewed" color="bg-orange-500" />
+                        <ServiceCard
+                            icon={Shield}
+                            label="Security"
+                            desc={twoFactorStatus?.enabled ? `${twoFactorStatus.backupCodesCount} backup codes` : 'Enable 2FA'}
+                            color="bg-indigo-500"
+                            onClick={() => setShowTwoFactorModal(true)}
+                        />
                         <ServiceCard icon={StoreIcon} label="Creator" desc="Sell on App" color="bg-gray-800" onClick={() => onNavigate('/')} />
                     </div>
                 </div>
@@ -287,6 +351,194 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onNavigate }) => {
                 </div>
 
             </div>
-        </div>
+
+        {/* Two-Factor Authentication Modal */ }
+    {
+        showTwoFactorModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+                    <div className="p-6 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center">
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <Shield size={24} className="text-indigo-600" />
+                            Two-Factor Authentication
+                        </h2>
+                        <button onClick={() => { setShowTwoFactorModal(false); setTwoFactorStep('setup'); setTwoFactorSetupData(null); setPasswordFor2FA(''); setVerificationCode(''); }} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full">
+                            <X size={20} />
+                        </button>
+                    </div>
+
+                    <div className="p-6">
+                        {/* If 2FA is enabled, show status */}
+                        {twoFactorStatus?.enabled ? (
+                            <div className="space-y-4">
+                                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 text-center">
+                                    <ShieldCheck size={48} className="mx-auto text-green-500 mb-2" />
+                                    <h3 className="font-bold text-green-700 dark:text-green-400">2FA is Enabled</h3>
+                                    <p className="text-sm text-green-600 dark:text-green-500 mt-1">
+                                        You have {twoFactorStatus.backupCodesCount} backup codes remaining.
+                                    </p>
+                                </div>
+
+                                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4">
+                                    <div className="flex items-start gap-3">
+                                        <AlertTriangle size={20} className="text-yellow-500 flex-shrink-0 mt-0.5" />
+                                        <div>
+                                            <h4 className="font-bold text-yellow-700 dark:text-yellow-400 text-sm">Warning</h4>
+                                            <p className="text-xs text-yellow-600 dark:text-yellow-500 mt-1">
+                                                Disabling 2FA will make your account less secure. You will no longer be able to use backup codes.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Your Password
+                                    </label>
+                                    <input
+                                        type="password"
+                                        value={passwordFor2FA}
+                                        onChange={(e) => setPasswordFor2FA(e.target.value)}
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                                        placeholder="Enter your password"
+                                    />
+                                </div>
+
+                                <button
+                                    onClick={() => disableTwoFactorMutation.mutate({ password: passwordFor2FA })}
+                                    disabled={!passwordFor2FA || disableTwoFactorMutation.isPending}
+                                    className="w-full py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    {disableTwoFactorMutation.isPending ? 'Disabling...' : 'Disable 2FA'}
+                                </button>
+                            </div>
+                        ) : (
+                            /* 2FA Setup Flow */
+                            <div className="space-y-4">
+                                {twoFactorStep === 'setup' && (
+                                    <>
+                                        <div className="text-center mb-4">
+                                            <Shield size={48} className="mx-auto text-indigo-500 mb-2" />
+                                            <h3 className="font-bold text-gray-900 dark:text-white">Enable Two-Factor Authentication</h3>
+                                            <p className="text-sm text-gray-500 mt-1">
+                                                Add an extra layer of security to your account by requiring a verification code in addition to your password.
+                                            </p>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                Your Password
+                                            </label>
+                                            <input
+                                                type="password"
+                                                value={passwordFor2FA}
+                                                onChange={(e) => setPasswordFor2FA(e.target.value)}
+                                                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                                                placeholder="Enter your password to continue"
+                                            />
+                                        </div>
+
+                                        <button
+                                            onClick={() => setupTwoFactorMutation.mutate({ password: passwordFor2FA })}
+                                            disabled={!passwordFor2FA || setupTwoFactorMutation.isPending}
+                                            className="w-full py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            {setupTwoFactorMutation.isPending ? 'Generating...' : 'Continue'}
+                                        </button>
+                                    </>
+                                )}
+
+                                {twoFactorStep === 'verify' && twoFactorSetupData && (
+                                    <>
+                                        <div className="text-center mb-4">
+                                            <Key size={48} className="mx-auto text-indigo-500 mb-2" />
+                                            <h3 className="font-bold text-gray-900 dark:text-white">Scan QR Code</h3>
+                                            <p className="text-sm text-gray-500 mt-1">
+                                                Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)
+                                            </p>
+                                        </div>
+
+                                        <div className="flex justify-center mb-4">
+                                            <img src={twoFactorSetupData.qrCode} alt="QR Code" className="w-48 h-48" />
+                                        </div>
+
+                                        <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 mb-4">
+                                            <p className="text-xs text-gray-500 text-center mb-2">Or enter this secret manually:</p>
+                                            <p className="text-sm font-mono text-center text-gray-900 dark:text-white break-all">
+                                                {twoFactorSetupData.secret}
+                                            </p>
+                                        </div>
+
+                                        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4 mb-4">
+                                            <div className="flex items-start gap-3">
+                                                <AlertTriangle size={20} className="text-yellow-500 flex-shrink-0 mt-0.5" />
+                                                <div>
+                                                    <h4 className="font-bold text-yellow-700 dark:text-yellow-400 text-sm">Save Your Backup Codes</h4>
+                                                    <p className="text-xs text-yellow-600 dark:text-yellow-500 mt-1">
+                                                        These codes can be used to access your account if you lose your phone. Store them securely!
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 grid grid-cols-2 gap-2">
+                                                {twoFactorSetupData.backupCodes.map((code, i) => (
+                                                    <code key={i} className="text-xs bg-white dark:bg-gray-900 p-2 rounded border border-yellow-200 dark:border-yellow-800 font-mono text-center">
+                                                        {code}
+                                                    </code>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                Verification Code
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={verificationCode}
+                                                onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 text-center text-2xl font-mono tracking-widest"
+                                                placeholder="000000"
+                                                maxLength={6}
+                                            />
+                                        </div>
+
+                                        <button
+                                            onClick={() => verifyTwoFactorMutation.mutate({ code: verificationCode })}
+                                            disabled={verificationCode.length !== 6 || verifyTwoFactorMutation.isPending}
+                                            className="w-full py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            {verifyTwoFactorMutation.isPending ? 'Verifying...' : 'Verify & Enable 2FA'}
+                                        </button>
+
+                                        <button
+                                            onClick={() => { setTwoFactorStep('setup'); setTwoFactorSetupData(null); setPasswordFor2FA(''); }}
+                                            className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </>
+                                )}
+
+                                {twoFactorStep === 'enabled' && (
+                                    <div className="text-center py-8">
+                                        <ShieldCheck size={64} className="mx-auto text-green-500 mb-4" />
+                                        <h3 className="font-bold text-xl text-gray-900 dark:text-white">2FA Enabled!</h3>
+                                        <p className="text-sm text-gray-500 mt-2 mb-6">
+                                            Your account is now protected with two-factor authentication.
+                                        </p>
+                                        <button
+                                            onClick={() => { setShowTwoFactorModal(false); setTwoFactorStep('setup'); setTwoFactorSetupData(null); setPasswordFor2FA(''); setVerificationCode(''); }}
+                                            className="w-full py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl"
+                                        >
+                                            Done
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </>
     );
 };

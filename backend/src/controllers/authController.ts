@@ -8,6 +8,13 @@ import { AuthRequest } from '../middleware/auth';
 import { firebaseAdminReady } from '../utils/firebase';
 import admin from '../utils/firebase';
 import crypto from 'crypto';
+import {
+    generateTwoFactorSetup,
+    enableTwoFactor,
+    disableTwoFactor,
+    verifyTwoFactor as verifyTwoFactorCode,
+    getTwoFactorStatus
+} from '../services/twoFactorService';
 
 // Email verification token generator
 const generateVerificationToken = (): string => {
@@ -99,7 +106,8 @@ type PendingPhoneOtp = {
 const pendingPhoneOtps = new Map<string, PendingPhoneOtp>();
 const PHONE_OTP_TTL_MS = 5 * 60 * 1000;
 const MAX_PHONE_OTP_ATTEMPTS = 5;
-const PHONE_OTP_DEBUG_ENABLED = process.env.NODE_ENV !== 'production' || process.env.PHONE_OTP_DEBUG === 'true';
+// Debug mode ONLY when explicitly enabled AND not in production
+const PHONE_OTP_DEBUG_ENABLED = process.env.NODE_ENV !== 'production' && process.env.PHONE_OTP_DEBUG === 'true';
 const PHONE_OTP_SECRET = process.env.PHONE_OTP_SECRET || 'acommerce-phone-otp-secret';
 
 const normalizePhoneNumber = (value: string): string => {
@@ -272,6 +280,18 @@ export const login = async (req: Request, res: Response) => {
         });
         if (!user || !(await bcrypt.compare(password, user.password))) {
             return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        // Check if 2FA is enabled - use type assertion as Prisma client may be outdated
+        const userWith2FA = user as unknown as { twoFactorEnabled?: boolean };
+        if (userWith2FA.twoFactorEnabled) {
+            // Return a temp token and require 2FA verification
+            const tempToken = generateToken(user.id, user.role);
+            return res.json({
+                requiresTwoFactor: true,
+                tempToken,
+                message: 'Please enter your 2FA code'
+            });
         }
 
         const token = generateToken(user.id, user.role);
@@ -666,9 +686,9 @@ export const verifyPhone = async (req: AuthRequest, res: Response) => {
 
         // In production, verify the code with Firebase
         // For now, we accept any 6-digit code in development mode
-        const isDevMode = process.env.NODE_ENV !== 'production';
+        const isDevMode = process.env.NODE_ENV !== 'production' && process.env.PHONE_OTP_DEBUG === 'true';
 
-        if (isDevMode || code === '123456') {
+        if (isDevMode) {
             // @ts-ignore - Prisma client needs regeneration
             const user = await prisma.user.update({
                 where: { id: userId },
@@ -690,5 +710,343 @@ export const verifyPhone = async (req: AuthRequest, res: Response) => {
         console.error('Phone verification error:', error);
         if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
         res.status(500).json({ error: 'Phone verification failed' });
+    }
+};
+
+// ============================================
+// Two-Factor Authentication (2FA) Controllers
+// ============================================
+
+const twoFactorSetupSchema = z.object({
+    password: z.string().min(1)
+});
+
+const twoFactorVerifySchema = z.object({
+    code: z.string().regex(/^\d{6}$/, 'Code must be 6 digits')
+});
+
+const twoFactorDisableSchema = z.object({
+    password: z.string().min(1),
+    code: z.string().regex(/^\d{6}$/, 'Code must be 6 digits').optional()
+});
+
+const twoFactorLoginSchema = z.object({
+    tempToken: z.string(),
+    code: z.string().regex(/^\d{6}$/, 'Code must be 6 digits')
+});
+
+// Generate 2FA setup (secret + QR code)
+export const setupTwoFactor = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const { password } = twoFactorSetupSchema.parse(req.body);
+
+        // Verify user's password
+        const user = await prisma.user.findUnique({
+            where: { id: userId }
+        });
+
+        if (!user || !(await bcrypt.compare(password, user.password))) {
+            return res.status(400).json({ error: 'Invalid password' });
+        }
+
+        // Check if 2FA is already enabled
+        const existingStatus = await getTwoFactorStatus(userId);
+        if (existingStatus.enabled) {
+            return res.status(400).json({ error: '2FA is already enabled' });
+        }
+
+        // Generate 2FA setup
+        const setup = await generateTwoFactorSetup(user.email);
+
+        // Store secret temporarily (not enabled yet)
+        await prisma.user.update({
+            where: { id: userId },
+            data: {
+                twoFactorSecret: setup.secret,
+                twoFactorBackupCodes: JSON.stringify(setup.backupCodes.map((code: string) => {
+                    // Hash backup codes for temporary storage
+                    const crypto = require('crypto');
+                    const salt = crypto.randomBytes(16).toString('hex');
+                    const hash = crypto.scryptSync(code.replace('-', ''), salt, 64);
+                    return `${salt}:${hash.toString('hex')}`;
+                }))
+            }
+        });
+
+        res.json({
+            secret: setup.secret,
+            qrCode: setup.qrCode,
+            backupCodes: setup.backupCodes,
+            message: 'Save these backup codes in a safe place. You can use them to recover your account if you lose access to your authenticator.'
+        });
+    } catch (error) {
+        console.error('2FA setup error:', error);
+        if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
+        res.status(500).json({ error: 'Failed to setup 2FA' });
+    }
+};
+
+// Verify and enable 2FA
+export const verifyTwoFactorEnable = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const { code } = twoFactorVerifySchema.parse(req.body);
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId }
+        });
+
+        if (!user || !user.twoFactorSecret) {
+            return res.status(400).json({ error: '2FA setup not initiated' });
+        }
+
+        // Verify the code using the twoFactorService
+        const { verifyTotpCode } = require('../services/twoFactorService');
+        const isValid = verifyTotpCode(user.twoFactorSecret, code);
+
+        if (!isValid) {
+            return res.status(400).json({ error: 'Invalid verification code' });
+        }
+
+        // Enable 2FA
+        await prisma.user.update({
+            where: { id: userId },
+            data: {
+                twoFactorEnabled: true
+            }
+        });
+
+        res.json({
+            success: true,
+            message: 'Two-factor authentication has been enabled successfully'
+        });
+    } catch (error) {
+        console.error('2FA verify error:', error);
+        if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
+        res.status(500).json({ error: 'Failed to verify 2FA' });
+    }
+};
+
+// Disable 2FA
+export const disableTwoFactorController = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const { password, code } = twoFactorDisableSchema.parse(req.body);
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId }
+        });
+
+        if (!user || !(await bcrypt.compare(password, user.password))) {
+            return res.status(400).json({ error: 'Invalid password' });
+        }
+
+        // If 2FA is enabled, verify the code first
+        if (user.twoFactorEnabled && user.twoFactorSecret) {
+            if (!code) {
+                return res.status(400).json({ error: 'Verification code required to disable 2FA' });
+            }
+
+            const { verifyTotpCode } = require('../services/twoFactorService');
+            const isValid = verifyTotpCode(user.twoFactorSecret, code);
+
+            if (!isValid) {
+                return res.status(400).json({ error: 'Invalid verification code' });
+            }
+        }
+
+        // Disable 2FA
+        await prisma.user.update({
+            where: { id: userId },
+            data: {
+                twoFactorEnabled: false,
+                twoFactorSecret: null,
+                twoFactorBackupCodes: null
+            }
+        });
+
+        res.json({
+            success: true,
+            message: 'Two-factor authentication has been disabled'
+        });
+    } catch (error) {
+        console.error('2FA disable error:', error);
+        if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
+        res.status(500).json({ error: 'Failed to disable 2FA' });
+    }
+};
+
+// Login with 2FA code
+export const loginWithTwoFactor = async (req: Request, res: Response) => {
+    try {
+        const { tempToken, code } = twoFactorLoginSchema.parse(req.body);
+
+        // Verify the temp token
+        const { verifyToken } = require('../utils/jwt');
+        let decoded;
+        try {
+            decoded = verifyToken(tempToken);
+        } catch {
+            return res.status(401).json({ error: 'Invalid or expired token' });
+        }
+
+        // Get user and verify 2FA
+        const user = await prisma.user.findUnique({
+            where: { id: decoded.userId }
+        });
+
+        if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
+            return res.status(400).json({ error: '2FA is not enabled for this user' });
+        }
+
+        // Verify the 2FA code
+        const { verifyTwoFactor: verifyTwoFactorCode } = require('../services/twoFactorService');
+        const verification = await verifyTwoFactorCode(user.id, code);
+
+        if (!verification.valid) {
+            return res.status(400).json({ error: 'Invalid verification code' });
+        }
+
+        // Generate final token
+        const token = generateToken(user.id, user.role);
+        res.json({
+            token,
+            user: await formatUserResponse(user),
+            message: verification.isBackupCode
+                ? 'Logged in using backup code. Note: This backup code can no longer be used.'
+                : 'Login successful'
+        });
+    } catch (error) {
+        console.error('2FA login error:', error);
+        if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
+        res.status(500).json({ error: 'Failed to login with 2FA' });
+    }
+};
+
+// Get 2FA status
+export const getTwoFactorStatusController = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const status = await getTwoFactorStatus(userId);
+        res.json(status);
+    } catch (error) {
+        console.error('2FA status error:', error);
+        res.status(500).json({ error: 'Failed to get 2FA status' });
+    }
+};
+
+// ============================================
+// Password Reset (JWT mode)
+// ============================================
+
+const passwordResetSchema = z.object({
+    email: z.string().email()
+});
+
+const passwordResetVerifySchema = z.object({
+    token: z.string().min(1),
+    email: z.string().email(),
+    newPassword: z.string()
+        .min(8, 'Password must be at least 8 characters')
+        .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+        .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+        .regex(/[0-9]/, 'Password must contain at least one number')
+        .regex(/[^a-zA-Z0-9]/, 'Password must contain at least one special character')
+});
+
+// Request password reset — generates a token and sends email
+export const requestPasswordReset = async (req: Request, res: Response) => {
+    try {
+        const { email } = passwordResetSchema.parse(req.body);
+        const normalizedEmail = email.trim().toLowerCase();
+
+        // Always return success to avoid user enumeration
+        const user = await prisma.user.findFirst({ where: { email: { equals: normalizedEmail } } });
+        if (!user) {
+            return res.json({ message: 'If the email exists, a password reset link has been sent.' });
+        }
+
+        const resetToken = generateVerificationToken();
+        const tokenExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { verificationToken: resetToken, verificationTokenExpires: tokenExpires }
+        });
+
+        const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/#/auth/reset-password?token=${resetToken}&email=${encodeURIComponent(normalizedEmail)}`;
+
+        // Send via SendGrid if configured, otherwise log
+        const { sendEmail } = await import('../services/emailService');
+        const emailResult = await sendEmail(normalizedEmail, 'Reset Your Password', 'password_reset', {
+            name: user.name,
+            resetToken: resetUrl,
+            resetExpiry: '1 hour'
+        });
+
+        if (!emailResult.success) {
+            console.log(`[Password Reset] Link for ${normalizedEmail}: ${resetUrl}`);
+        }
+
+        res.json({ message: 'If the email exists, a password reset link has been sent.' });
+    } catch (error) {
+        console.error('Password reset request error:', error);
+        if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
+        res.status(500).json({ error: 'Failed to process password reset request' });
+    }
+};
+
+// Confirm password reset with token
+export const confirmPasswordReset = async (req: Request, res: Response) => {
+    try {
+        const { token, email, newPassword } = passwordResetVerifySchema.parse(req.body);
+        const normalizedEmail = email.trim().toLowerCase();
+
+        const user = await prisma.user.findFirst({ where: { email: { equals: normalizedEmail } } });
+        if (!user) {
+            return res.status(400).json({ error: 'Invalid or expired reset token' });
+        }
+
+        if (user.verificationToken !== token) {
+            return res.status(400).json({ error: 'Invalid or expired reset token' });
+        }
+
+        if (!user.verificationTokenExpires || user.verificationTokenExpires < new Date()) {
+            return res.status(400).json({ error: 'Reset token has expired. Please request a new one.' });
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                password: hashedPassword,
+                verificationToken: null,
+                verificationTokenExpires: null
+            }
+        });
+
+        res.json({ message: 'Password reset successfully. You can now sign in with your new password.' });
+    } catch (error) {
+        console.error('Password reset confirm error:', error);
+        if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid input' });
+        res.status(500).json({ error: 'Failed to reset password' });
     }
 };

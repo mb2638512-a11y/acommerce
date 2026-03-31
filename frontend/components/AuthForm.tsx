@@ -35,9 +35,10 @@ import { getPostLoginRoute } from '../src/lib/adminAccess';
 import { User } from '../types';
 
 // Types
-type AuthMode = 'signin' | 'signup' | 'forgot_password';
+type AuthMode = 'signin' | 'signup' | 'forgot_password' | 'reset_password';
 type AuthMethod = 'email' | 'phone';
 type VerificationStep = 'input' | 'verify' | 'complete';
+type TwoFactorStep = 'none' | 'verify';
 
 interface PasswordRequirement {
  label: string;
@@ -281,6 +282,18 @@ export const AuthForm: React.FC = () => {
  // Email Verification
  const [verificationEmailSent, setVerificationEmailSent] = useState(false);
 
+ // 2FA State
+ const [twoFactorStep, setTwoFactorStep] = useState<TwoFactorStep>('none');
+ const [twoFactorTempToken, setTwoFactorTempToken] = useState('');
+ const [twoFactorCode, setTwoFactorCode] = useState('');
+
+ // Password Reset (from email link)
+ const [resetToken, setResetToken] = useState('');
+ const [resetEmail, setResetEmail] = useState('');
+ const [newPassword, setNewPassword] = useState('');
+ const [confirmNewPassword, setConfirmNewPassword] = useState('');
+ const [resetSuccess, setResetSuccess] = useState(false);
+
  useEffect(() => {
   setMounted(true);
  }, []);
@@ -366,33 +379,41 @@ export const AuthForm: React.FC = () => {
   }
  };
 
- // Forgot Password Handler
+ // Forgot Password Handler — tries backend first, falls back to Firebase/Supabase
  const handleForgotPassword = async () => {
   if (!email) return showToast("Email is required", "error");
   setLoading(true);
   try {
+   // Always try our backend endpoint first (works for all auth modes)
    try {
-    if (USE_FIREBASE && firebaseInitialized && auth) {
-     await firebaseSendPasswordResetEmail(auth, email);
-    } else if (supabase) {
-     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/#/auth/callback`,
-     });
-     if (error) throw error;
-    } else {
-     throw new Error('No auth provider available');
-    }
-   } catch (firebaseErr: any) {
-    if (firebaseErr?.code === 'auth/configuration-not-found' || firebaseErr?.code === 'auth/invalid-api-key') {
-     showToast('Password reset is temporarily unavailable. Please contact support.', 'info');
-     setRecoveryEmailSent(true);
-     return;
-    }
-    throw firebaseErr;
+    await api.post('/auth/password-reset', { email: email.trim().toLowerCase() });
+    setRecoveryEmailSent(true);
+    showToast("Password reset link sent to your email.", "success");
+    return;
+   } catch (backendErr: any) {
+    // If backend fails, fall through to Firebase/Supabase
+    console.warn('Backend password reset failed, trying provider:', backendErr.message);
+   }
+
+   // Fallback to Firebase or Supabase
+   if (USE_FIREBASE && firebaseInitialized && auth) {
+    await firebaseSendPasswordResetEmail(auth, email);
+   } else if (supabase) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+     redirectTo: `${window.location.origin}/#/auth/reset-password`,
+    });
+    if (error) throw error;
+   } else {
+    throw new Error('No auth provider available');
    }
    setRecoveryEmailSent(true);
    showToast("Password reset link sent to your email.", "success");
   } catch (error: any) {
+   if (error?.code === 'auth/configuration-not-found' || error?.code === 'auth/invalid-api-key') {
+    showToast('Password reset is temporarily unavailable. Please contact support.', 'info');
+    setRecoveryEmailSent(true);
+    return;
+   }
    showToast(error.message || "Failed to send reset link. Please try again.", "error");
   } finally {
    setLoading(false);
@@ -438,20 +459,23 @@ export const AuthForm: React.FC = () => {
    } else {
     showToast('Google sign-in is not available. Please use email sign-in.', 'info');
    }
-  } catch (error: any) {
-   console.error('Google Auth Error:', error);
-   const message = error.code === 'auth/popup-blocked'
-    ? 'Sign-in popup was blocked. Please allow popups for this site.'
-    : error.code === 'auth/unauthorized-domain'
-     ? 'This domain is not approved for Firebase sign-in. Use email or phone authentication instead.'
-    : error.code === 'auth/configuration-not-found'
-     ? 'Google sign-in is being configured. Please use email sign-in.'
-     : error.message || 'Google sign-in failed.';
-   showToast(message, 'error');
-  } finally {
-   setLoading(false);
-  }
- };
+   } catch (error: any) {
+    console.error('Google Auth Error:', error);
+    const message = error.code === 'auth/popup-blocked'
+     ? 'Sign-in popup was blocked. Please allow popups for this site.'
+     : error.code === 'auth/unauthorized-domain'
+      ? 'Google sign-in is not available on this domain. Please use Email or Phone authentication.'
+     : error.code === 'auth/configuration-not-found'
+      ? 'Google sign-in is being configured. Please use email sign-in.'
+      : error.message || 'Google sign-in failed.';
+    showToast(message, 'error');
+    if (error?.code === 'auth/unauthorized-domain') {
+     switchAuthMethod('email');
+    }
+   } finally {
+    setLoading(false);
+   }
+  };
 
  // Phone OTP Send Handler
  const handleSendOTP = async () => {
@@ -608,6 +632,14 @@ export const AuthForm: React.FC = () => {
      rememberMe
     });
 
+    // Handle 2FA requirement
+    if (response.data.requiresTwoFactor) {
+     setTwoFactorTempToken(response.data.tempToken);
+     setTwoFactorStep('verify');
+     setLoading(false);
+     return;
+    }
+
     const userData = response.data.user;
     login(response.data.token, userData);
 
@@ -636,6 +668,36 @@ export const AuthForm: React.FC = () => {
   }
  };
 
+ // 2FA Login Handler
+ const handleTwoFactorLogin = async () => {
+  if (!twoFactorCode || twoFactorCode.length < 6) {
+   setErrors({ twoFactor: 'Please enter the complete 6-digit code' });
+   return;
+  }
+  setLoading(true);
+  setErrors({});
+  try {
+   const response = await api.post('/auth/2fa/login', {
+    tempToken: twoFactorTempToken,
+    code: twoFactorCode
+   });
+   const userData = response.data.user;
+   login(response.data.token, userData);
+   showToast("Logged in successfully!", "success");
+   if (userData?.isVerified === false) {
+    navigate('/verify');
+   } else {
+    navigate(getPostLoginRoute(userData as User));
+   }
+  } catch (error: any) {
+   const message = error?.response?.data?.error || 'Invalid or expired 2FA code';
+   setErrors({ twoFactor: message });
+   showToast(message, 'error');
+  } finally {
+   setLoading(false);
+  }
+ };
+
  // Switch Mode
  const switchMode = (newMode: AuthMode) => {
   setMode(newMode);
@@ -649,6 +711,9 @@ export const AuthForm: React.FC = () => {
   setRecoveryEmailSent(false);
   setVerificationEmailSent(false);
   setVerificationStep('input');
+  setTwoFactorStep('none');
+  setTwoFactorTempToken('');
+  setTwoFactorCode('');
   setErrors({});
  };
 
@@ -755,7 +820,7 @@ export const AuthForm: React.FC = () => {
 
       <div className={`glass-card p-10 md:p-12 rounded-[3rem] shadow-2xl transition-all duration-700 ${mounted ? 'translate-y-0 opacity-100' : 'translate-y-12 opacity-0'}`}>
        {/* Back Button */}
-       {(step > 1 || mode === 'forgot_password' || verificationStep === 'verify') && (
+       {(step > 1 || mode === 'forgot_password' || verificationStep === 'verify') && twoFactorStep === 'none' && (
         <button
          onClick={() => {
           if (verificationStep === 'verify') {
@@ -774,8 +839,31 @@ export const AuthForm: React.FC = () => {
         </button>
        )}
 
-       {/* Email Verification Complete */}
-       {verificationEmailSent && verificationStep === 'complete' ? (
+       {/* ── 2FA Verification Screen ── */}
+       {twoFactorStep === 'verify' ? (
+        <div className="text-center">
+         <div className="mb-8 pt-4">
+          <div className="w-16 h-16 bg-indigo-500/10 text-indigo-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+           <Shield size={32} />
+          </div>
+          <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight mb-3">Two-Factor Auth</h2>
+          <p className="text-slate-500 dark:text-slate-400 text-sm">Enter the 6-digit code from your authenticator app</p>
+         </div>
+         <OTPInput length={6} value={twoFactorCode} onChange={setTwoFactorCode} error={errors.twoFactor} />
+         <button
+          onClick={handleTwoFactorLogin}
+          disabled={loading || twoFactorCode.length < 6}
+          className="w-full mt-8 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] shadow-xl shadow-indigo-600/30 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
+         >
+          {loading ? <Loader2 className="animate-spin mx-auto" /> : 'Verify & Sign In'}
+         </button>
+         <button onClick={() => switchMode('signin')} className="mt-4 text-xs text-slate-400 hover:text-indigo-500 transition-colors">
+          Back to Sign In
+         </button>
+        </div>
+
+       ) : /* Email Verification Complete */
+       verificationEmailSent && verificationStep === 'complete' ? (
         <div className="text-center py-6 animate-fade-in">
          <div className="w-24 h-24 bg-green-500/10 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
           <CheckCircle2 size={48} />

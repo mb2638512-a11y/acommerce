@@ -12,7 +12,14 @@ import {
   verifyPhone,
   sendPhoneOtp,
   verifyPhoneOtp,
-  verifyPhoneRegister
+  verifyPhoneRegister,
+  setupTwoFactor,
+  verifyTwoFactorEnable,
+  disableTwoFactorController,
+  loginWithTwoFactor,
+  getTwoFactorStatusController,
+  requestPasswordReset,
+  confirmPasswordReset
 } from '../controllers/authController';
 import { authenticate } from '../middleware/auth';
 
@@ -31,5 +38,16 @@ router.post('/verify-phone', authenticate, verifyPhone);
 router.post('/kyc', authenticate, submitKyc);
 router.post('/payment', authenticate, verifyPayment);
 router.patch('/profile', authenticate, updateProfile);
+
+// Password reset (JWT mode)
+router.post('/password-reset', requestPasswordReset);
+router.post('/password-reset/confirm', confirmPasswordReset);
+
+// Two-Factor Authentication routes
+router.post('/2fa/setup', authenticate, setupTwoFactor);
+router.post('/2fa/verify', authenticate, verifyTwoFactorEnable);
+router.post('/2fa/disable', authenticate, disableTwoFactorController);
+router.post('/2fa/login', loginWithTwoFactor);
+router.get('/2fa/status', authenticate, getTwoFactorStatusController);
 
 export default router;

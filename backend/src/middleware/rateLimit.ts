@@ -7,6 +7,16 @@ type Bucket = {
 
 const buckets = new Map<string, Bucket>();
 
+// Periodically clean up expired buckets to prevent memory leaks
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, bucket] of buckets.entries()) {
+        if (now > bucket.resetAt) {
+            buckets.delete(key);
+        }
+    }
+}, 5 * 60 * 1000); // every 5 minutes
+
 type RateLimitOptions = {
     keyPrefix: string;
     max: number;

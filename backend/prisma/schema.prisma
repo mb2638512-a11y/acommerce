@@ -28,6 +28,10 @@ model User {
   phoneVerified Boolean @default(false)
   companyName String?
   plan      String   @default("FREE")  // FREE, PRO, PREMIUM, ENTERPRISE
+  // Two-Factor Authentication
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret String?
+  twoFactorBackupCodes String? // JSON string of hashed backup codes
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

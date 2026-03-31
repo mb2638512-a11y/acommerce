@@ -9,14 +9,18 @@ const getRequiredEnv = (name: string): string => {
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
 const nodeEnv = process.env.NODE_ENV || 'development';
-const adminDashboardEmail = normalizeEmail(process.env.ADMIN_DASHBOARD_EMAIL || 'secret@gmail.com');
+const adminDashboardEmail = normalizeEmail(process.env.ADMIN_DASHBOARD_EMAIL || '');
 const corsOrigins = (process.env.CORS_ORIGIN || '')
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
 
-if (!/^[^\s@]+@gmail\.com$/i.test(adminDashboardEmail)) {
-    throw new Error('ADMIN_DASHBOARD_EMAIL must be a valid Gmail address');
+if (adminDashboardEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminDashboardEmail)) {
+    throw new Error('ADMIN_DASHBOARD_EMAIL must be a valid email address');
+}
+
+if (nodeEnv === 'production' && !adminDashboardEmail) {
+    throw new Error('ADMIN_DASHBOARD_EMAIL must be set in production');
 }
 
 if (nodeEnv === 'production' && corsOrigins.length === 0) {
@@ -41,6 +45,14 @@ export const env = {
     // Content Moderation Settings
     contentModerationEnabled: process.env.CONTENT_MODERATION_ENABLED === 'true',
     moderationStrictMode: process.env.MODERATION_STRICT_MODE === 'true',
+    // SendGrid Email Settings
+    sendgridApiKey: process.env.SENDGRID_API_KEY || '',
+    fromEmail: process.env.FROM_EMAIL || 'noreply@aureon.com',
+    fromName: process.env.FROM_NAME || 'Aureon',
+
+    // EasyPost Shipping Settings
+    easyPostApiKey: process.env.EASYPOST_API_KEY || '',
+    easyPostTestApiKey: process.env.EASYPOST_TEST_API_KEY || '',
 };
 
 export const isProduction = env.nodeEnv === 'production';

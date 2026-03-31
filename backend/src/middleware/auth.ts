@@ -12,12 +12,16 @@ export interface AuthRequest extends Request {
 }
 
 const USE_FIREBASE = process.env.USE_FIREBASE === 'true' || process.env.VITE_USE_FIREBASE === 'true';
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecret_acommerce_key_change_in_prod';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+    throw new Error('Missing required environment variable: JWT_SECRET');
+}
 
 // JWT-only verification fallback (used when Firebase Admin SDK is not initialized)
 const verifyWithJWT = (token: string): { userId: string; role: 'admin' | 'user' } | null => {
     try {
-        const decoded = jwt.verify(token, JWT_SECRET) as any;
+        const decoded = jwt.verify(token, JWT_SECRET as string) as any;
         return {
             userId: decoded.userId || decoded.id || decoded.sub,
             role: decoded.role || 'user'
@@ -36,13 +40,20 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     const token = authHeader.split(' ')[1];
     try {
         if (USE_FIREBASE && firebaseAdminReady && firebaseAuth) {
-            // Firebase Admin SDK is available — verify Firebase ID token
-            const decodedToken = await (firebaseAuth as any).verifyIdToken(token);
-            req.user = {
-                userId: decodedToken.uid,
-                role: decodedToken.admin ? 'admin' : 'user',
-                email: decodedToken.email
-            };
+            // Firebase Admin SDK is available — try Firebase ID token first, fall back to JWT
+            try {
+                const decodedToken = await (firebaseAuth as any).verifyIdToken(token);
+                req.user = {
+                    userId: decodedToken.uid,
+                    role: decodedToken.admin ? 'admin' : 'user',
+                    email: decodedToken.email
+                };
+            } catch {
+                // Token is not a Firebase ID token — try JWT fallback (for email/password auth)
+                const decoded = verifyWithJWT(token);
+                if (!decoded) return res.status(401).json({ error: 'Invalid token' });
+                req.user = { userId: decoded.userId, role: decoded.role };
+            }
         } else if (USE_FIREBASE && !firebaseAdminReady) {
             // Firebase mode but Admin SDK not available — fall back to JWT
             const decoded = verifyWithJWT(token);
@@ -75,12 +86,20 @@ export const authenticateOptional = async (req: AuthRequest, res: Response, next
     const token = authHeader.split(' ')[1];
     try {
         if (USE_FIREBASE && firebaseAdminReady && firebaseAuth) {
-            const decodedToken = await (firebaseAuth as any).verifyIdToken(token);
-            req.user = {
-                userId: decodedToken.uid,
-                role: decodedToken.admin ? 'admin' : 'user',
-                email: decodedToken.email
-            };
+            try {
+                const decodedToken = await (firebaseAuth as any).verifyIdToken(token);
+                req.user = {
+                    userId: decodedToken.uid,
+                    role: decodedToken.admin ? 'admin' : 'user',
+                    email: decodedToken.email
+                };
+            } catch {
+                // Token is not a Firebase ID token — try JWT fallback (for email/password auth)
+                const decoded = verifyWithJWT(token);
+                if (decoded) {
+                    req.user = { userId: decoded.userId, role: decoded.role };
+                }
+            }
         } else if (USE_FIREBASE && !firebaseAdminReady) {
             const decoded = verifyWithJWT(token);
             if (decoded) {

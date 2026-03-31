@@ -1,1 +1,8 @@
 .vercel
+.env
+.env.*
+node_modules
+dist
+pgdata
+prisma/*.db
+prisma/*.sqlite*

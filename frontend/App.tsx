@@ -20,6 +20,7 @@ const Marketplace = lazy(() => import('./pages/Marketplace'));
 const Auth = lazy(() => import('./pages/Auth').then((module) => ({ default: module.Auth })));
 const Verification = lazy(() => import('./pages/Verification').then((module) => ({ default: module.Verification })));
 const AuthCallback = lazy(() => import('./pages/AuthCallback').then((module) => ({ default: module.AuthCallback })));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Legal = lazy(() => import('./pages/Legal'));
 const DisputeCenter = lazy(() => import('./pages/DisputeCenter'));
 const FeedbackPage = lazy(() => import('./pages/FeedbackPage'));
@@ -130,6 +131,9 @@ const AppRoutes = () => {
 
         {/* Feedback Routes */}
         <Route path="/feedback/:type/:id" element={<FeedbackPage />} />
+
+        {/* Password Reset */}
+        <Route path="/auth/reset-password" element={<ResetPassword />} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />

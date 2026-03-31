@@ -1,14 +1,16 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
-import { app as firebaseApp, auth as firebaseAuth, firebaseInitialized } from '../lib/firebase';
-import { supabase } from '../lib/supabase';
-import { USE_FIREBASE } from '../lib/config';
-import { User } from '../../types';
+﻿import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { app as firebaseApp, auth as firebaseAuth, firebaseInitialized } from "../lib/firebase";
+import { supabase } from "../lib/supabase";
+import { USE_FIREBASE } from "../lib/config";
+import { User } from "../../types";
 
 interface AuthContextType {
     user: User | null;
+    token: string | null;
     login: (token: string, userData: User) => void;
     logout: () => Promise<void>;
+    refreshUser: (userData: User) => void;
     loading: boolean;
 }
 
@@ -16,135 +18,113 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(() => {
-        const savedUser = localStorage.getItem('user');
-        return savedUser ? JSON.parse(savedUser) : null;
+        try {
+            const saved = localStorage.getItem("user");
+            return saved ? JSON.parse(saved) : null;
+        } catch { return null; }
     });
+    const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         if (USE_FIREBASE && firebaseInitialized && firebaseAuth && firebaseApp) {
             try {
-                const unsubscribe = onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
-                    if (firebaseUser) {
+                const unsubscribe = onAuthStateChanged(firebaseAuth, async (fbUser) => {
+                    if (fbUser) {
                         try {
-                            const { doc, getDoc, getFirestore } = await import('firebase/firestore');
-                            const firestore = getFirestore(firebaseApp);
-                            const userDoc = await getDoc(doc(firestore, 'users', firebaseUser.uid));
-                            if (userDoc.exists()) {
-                                const userData = userDoc.data() as User;
-                                setUser(userData);
-                                localStorage.setItem('user', JSON.stringify(userData));
-                            } else {
-                                const userData = {
-                                    id: firebaseUser.uid,
-                                    email: firebaseUser.email || '',
-                                    name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-                                    role: 'user',
-                                    joinedAt: Date.now()
-                                } as User;
-                                setUser(userData);
-                                localStorage.setItem('user', JSON.stringify(userData));
-                            }
-                        } catch (error) {
-                            console.error("AuthContext: Error fetching user doc:", error);
-                            const fallbackUser = {
-                                id: firebaseUser.uid,
-                                email: firebaseUser.email || '',
-                                name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-                                role: 'user',
-                                joinedAt: Date.now()
-                            } as User;
-                            setUser(fallbackUser);
-                            localStorage.setItem('user', JSON.stringify(fallbackUser));
+                            const { doc, getDoc, getFirestore } = await import("firebase/firestore");
+                            const fs = getFirestore(firebaseApp);
+                            const snap = await getDoc(doc(fs, "users", fbUser.uid));
+                            const userData = snap.exists()
+                                ? (snap.data() as User)
+                                : { id: fbUser.uid, email: fbUser.email || "", name: fbUser.displayName || fbUser.email?.split("@")[0] || "User", role: "user", joinedAt: Date.now() } as User;
+                            setUser(userData);
+                            localStorage.setItem("user", JSON.stringify(userData));
+                        } catch {
+                            const fallback = { id: fbUser.uid, email: fbUser.email || "", name: fbUser.displayName || fbUser.email?.split("@")[0] || "User", role: "user", joinedAt: Date.now() } as User;
+                            setUser(fallback);
+                            localStorage.setItem("user", JSON.stringify(fallback));
                         }
                     } else {
-                        setUser(null);
-                        localStorage.removeItem('user');
-                        localStorage.removeItem('token');
+                        // Only clear if no JWT token (JWT auth is independent of Firebase)
+                        if (!localStorage.getItem("token")) {
+                            setUser(null);
+                            localStorage.removeItem("user");
+                        }
                     }
                     setLoading(false);
                 });
                 return () => unsubscribe();
-            } catch (firebaseError) {
-                console.warn("AuthContext: Firebase auth initialization failed:", firebaseError);
+            } catch {
+                const t = localStorage.getItem("token");
+                const u = localStorage.getItem("user");
+                if (t && u) { try { setUser(JSON.parse(u)); setToken(t); } catch {} }
                 setLoading(false);
             }
         } else if (!USE_FIREBASE) {
-            // Supabase Auth
             const client = supabase;
             if (!client) {
-                console.warn('AuthContext: Supabase client is null. Auth listener skipped.');
+                const t = localStorage.getItem("token");
+                const u = localStorage.getItem("user");
+                if (t && u) { try { setUser(JSON.parse(u)); setToken(t); } catch {} }
                 setLoading(false);
                 return;
             }
-            const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
+            const { data: { subscription } } = client.auth.onAuthStateChange(async (_event, session) => {
                 if (session?.user) {
-                    const { data: userData } = await client
-                        .from('users')
-                        .select('*')
-                        .eq('id', session.user.id)
-                        .single();
-
-                    if (userData) {
-                        const formattedUser = userData as User;
-                        setUser(formattedUser);
-                        localStorage.setItem('user', JSON.stringify(formattedUser));
-                    } else {
-                        const formattedUser = {
-                            id: session.user.id,
-                            email: session.user.email || '',
-                            name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
-                            role: 'user',
-                            joinedAt: Date.now()
-                        } as User;
-                        setUser(formattedUser);
-                        localStorage.setItem('user', JSON.stringify(formattedUser));
-                    }
+                    const { data: row } = await client.from("users").select("*").eq("id", session.user.id).single();
+                    const formatted = row
+                        ? (row as User)
+                        : { id: session.user.id, email: session.user.email || "", name: session.user.user_metadata?.name || session.user.email?.split("@")[0] || "User", role: "user", joinedAt: Date.now() } as User;
+                    setUser(formatted);
+                    localStorage.setItem("user", JSON.stringify(formatted));
                 } else {
-                    setUser(null);
-                    localStorage.removeItem('user');
-                    localStorage.removeItem('token');
+                    if (!localStorage.getItem("token")) {
+                        setUser(null);
+                        setToken(null);
+                        localStorage.removeItem("user");
+                        localStorage.removeItem("token");
+                    }
                 }
                 setLoading(false);
             });
             return () => subscription.unsubscribe();
         } else {
-            // Firebase disabled or not available, check for local auth
-            const savedToken = localStorage.getItem('token');
-            const savedUser = localStorage.getItem('user');
-            if (savedToken && savedUser) {
-                setUser(JSON.parse(savedUser));
-            }
+            const t = localStorage.getItem("token");
+            const u = localStorage.getItem("user");
+            if (t && u) { try { setUser(JSON.parse(u)); setToken(t); } catch {} }
             setLoading(false);
         }
     }, []);
 
-    const login = (token: string, userData: User) => {
-        localStorage.setItem('token', token);
-        localStorage.setItem('user', JSON.stringify(userData));
+    const login = useCallback((newToken: string, userData: User) => {
+        localStorage.setItem("token", newToken);
+        localStorage.setItem("user", JSON.stringify(userData));
+        setToken(newToken);
         setUser(userData);
-    };
+    }, []);
 
-    const logout = async () => {
+    const refreshUser = useCallback((userData: User) => {
+        localStorage.setItem("user", JSON.stringify(userData));
+        setUser(userData);
+    }, []);
+
+    const logout = useCallback(async () => {
         try {
-            if (USE_FIREBASE) {
-                await firebaseSignOut(firebaseAuth);
-            } else {
-                const client = supabase;
-                if (client) {
-                    await client.auth.signOut();
-                }
-            }
+            if (USE_FIREBASE && firebaseAuth) await firebaseSignOut(firebaseAuth);
+            else if (!USE_FIREBASE && supabase) await supabase.auth.signOut();
+        } catch (err) {
+            console.error("AuthContext: Logout error:", err);
+        } finally {
             setUser(null);
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-        } catch (error) {
-            console.error("AuthContext: Logout error:", error);
+            setToken(null);
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
         }
-    };
+    }, []);
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, loading }}>
+        <AuthContext.Provider value={{ user, token, login, logout, refreshUser, loading }}>
             {children}
         </AuthContext.Provider>
     );
@@ -152,6 +132,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 export const useAuth = () => {
     const context = useContext(AuthContext);
-    if (!context) throw new Error('useAuth must be used within an AuthProvider');
+    if (!context) throw new Error("useAuth must be used within an AuthProvider");
     return context;
 };

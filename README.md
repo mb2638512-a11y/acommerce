@@ -18,14 +18,14 @@ PORT=5000
 CORS_ORIGIN=http://localhost:5173
 GEMINI_API_KEY=optional-for-ai-endpoints
 NODE_ENV=development
-ADMIN_DASHBOARD_EMAIL=secret@gmail.com
+ADMIN_DASHBOARD_EMAIL=admin@yourdomain.com
 ```
 
 Create `.env.local` for frontend:
 
 ```env
 VITE_API_URL=http://localhost:5000/api
-VITE_ADMIN_DASHBOARD_EMAIL=secret@gmail.com
+VITE_ADMIN_DASHBOARD_EMAIL=admin@yourdomain.com
 ```
 
 ## Install

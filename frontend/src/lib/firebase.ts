@@ -4,15 +4,15 @@ import { getAuth, GoogleAuthProvider, Auth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Firebase configuration from environment variables (with fallback to hardcoded values)
+// Firebase configuration from environment variables only
 const firebaseConfig = {
- apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCzjreTSmDX1CicjY8cHsngyekea9lYNBk",
- authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "acommerce-42565.firebaseapp.com",
- projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "acommerce-42565",
- storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "acommerce-42565.firebasestorage.app",
- messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "231208905773",
- appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:231208905773:web:32b163a50c1d2a0c3e9ca4",
- measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-2W1G3TX5RT"
+ apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+ authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+ projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+ storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+ messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+ appId: import.meta.env.VITE_FIREBASE_APP_ID,
+ measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Track if Firebase is initialized

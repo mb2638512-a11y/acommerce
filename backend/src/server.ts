@@ -117,6 +117,20 @@ app.use((error: Error, req: express.Request, res: express.Response, next: expres
 
 const server = app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
+
+    // Warn about insecure defaults in production
+    if (isProduction) {
+        const weakSecrets = ['supersecret', 'secret', 'changeme', 'change-this', 'acommerce'];
+        if (weakSecrets.some(w => env.jwtSecret.toLowerCase().includes(w))) {
+            console.error('[SECURITY] JWT_SECRET appears to be a default/weak value. Change it before going live.');
+        }
+        if (!env.stripeSecretKey || env.stripeSecretKey.startsWith('sk_test_')) {
+            console.warn('[WARNING] STRIPE_SECRET_KEY is missing or using a test key in production.');
+        }
+        if (!env.sendgridApiKey) {
+            console.warn('[WARNING] SENDGRID_API_KEY is not set. Emails will not be sent.');
+        }
+    }
 });
 
 const shutdown = async (signal: string) => {

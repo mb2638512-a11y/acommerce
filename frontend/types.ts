@@ -19,6 +19,19 @@ export interface User {
   // For role-based redirect
   stores?: string[]; // Array of store IDs the user owns
   plan?: PlanTier;
+  // Two-Factor Authentication
+  twoFactorEnabled?: boolean;
+}
+
+export interface TwoFactorSetup {
+  secret: string;
+  qrCode: string;
+  backupCodes: string[];
+}
+
+export interface TwoFactorStatus {
+  enabled: boolean;
+  backupCodesCount: number;
 }
 
 export interface Review {

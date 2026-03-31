@@ -546,12 +546,8 @@ export const AuthForm: React.FC = () => {
     login(response.data.token, response.data.user);
    }
 
-   showToast(response.data.message || 'Logged in successfully!', 'success');
-   if (response.data.user?.isVerified === false) {
-    navigate('/verify');
-   } else {
+    showToast(response.data.message || 'Logged in successfully!', 'success');
     navigate(getPostLoginRoute(response.data.user as User));
-   }
   } catch (error: any) {
    console.error('OTP Verify Error:', error);
    const message = error?.response?.data?.error || 'Invalid or expired verification code';
@@ -585,8 +581,8 @@ export const AuthForm: React.FC = () => {
     login(response.data.token, response.data.user);
    }
 
-   showToast('Account created successfully!', 'success');
-   navigate('/verify');
+    showToast('Account created successfully!', 'success');
+    navigate(getPostLoginRoute(response.data.user as User));
   } catch (error: any) {
    console.error('Phone Register Error:', error);
    const message = error?.response?.data?.error || 'Invalid or expired verification code';
@@ -623,7 +619,7 @@ export const AuthForm: React.FC = () => {
      setVerificationEmailSent(true);
      setVerificationStep('complete');
     } else {
-     navigate('/verify');
+     navigate(getPostLoginRoute(response.data.user as User));
     }
    } else {
     const response = await api.post('/auth/login', {
@@ -644,11 +640,7 @@ export const AuthForm: React.FC = () => {
     login(response.data.token, userData);
 
     showToast("Logged in successfully!", "success");
-    if (userData?.isVerified === false) {
-     navigate('/verify');
-    } else {
-     navigate(getPostLoginRoute(userData as User));
-    }
+    navigate(getPostLoginRoute(userData as User));
    }
   } catch (error: any) {
    const msg = error?.response?.data?.error || error.message || (mode === 'signup' ? 'Registration failed' : 'Login failed');

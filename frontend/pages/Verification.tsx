@@ -27,7 +27,7 @@ export const Verification: React.FC = () => {
  // Payment Data
  const [provider, setProvider] = useState<'STRIPE' | 'PAYPAL' | null>(null);
 
- // Auto-navigate to correct step
+ // Auto-navigate to correct step - allow users to proceed to dashboard
  useEffect(() => {
   if (user) {
    if (user.isVerified && user.kycStatus === 'APPROVED' && user.paymentVerified) {
@@ -377,6 +377,18 @@ export const Verification: React.FC = () => {
         <div className="mt-8">
          <Loader2 size={24} className="text-emerald-500 animate-spin mx-auto" />
         </div>
+       </div>
+      )}
+      
+      {/* Skip to Dashboard link */}
+      {step < 5 && (
+       <div className="mt-6 text-center">
+        <button
+         onClick={() => navigate('/dashboard')}
+         className="text-sm text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors underline underline-offset-2"
+        >
+         Skip for now - Go to Dashboard
+        </button>
        </div>
       )}
      </div>

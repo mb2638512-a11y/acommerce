@@ -93,7 +93,6 @@ h1, h2, h3, h4, .font-heading {
 
 /* ========================================
    PlatformAdmin Light Mode Fixes
-   Override dark-only color patterns
    ======================================== */
 
 /* Fix text colors that are only defined for dark mode */
@@ -113,13 +112,17 @@ h1, h2, h3, h4, .font-heading {
   color: #6b7280;
 }
 
-/* Fix dark-only backgrounds */
-.dark\:bg-\[\\#0f111a\],
-.dark\:bg-\[\\#0f111a\]\/50,
-.dark\:bg-\[\\#121827\],
-.dark\:bg-\[\\#131827\],
-.dark\:bg-\[\\#0a0f1a\],
-.dark\:bg-\[\\#0b1020\] {
+/* Fix dark-only backgrounds - use attribute selectors to avoid CSS syntax errors */
+[class*="dark:bg-[#0f111a]"],
+[class*="dark:bg-[#121827]"],
+[class*="dark:bg-[#131827]"],
+[class*="dark:bg-[#0a0f1a]"],
+[class*="dark:bg-[#0b1020]"],
+[class*="dark:bg-[#07070d]"] {
+}
+
+/* Fallback for dark-only bg in light mode */
+[class*="dark:bg-"]:not([class*="bg-white"]):not([class*="bg-gray-"]):not([class*="bg-transparent"]):not([class*="bg-gradient"]):not([class*="bg-cyan-"]):not([class*="bg-blue-"]):not([class*="bg-emerald-"]):not([class*="bg-rose-"]):not([class*="bg-amber-"]):not([class*="bg-purple-"]):not([class*="bg-orange-"]):not([class*="bg-red-"]):not([class*="bg-yellow"]):not([class*="bg-green"]):not([class*="bg-pink"]):not([class*="bg-indigo"]):not([class*="bg-violet"]):not([class*="bg-fuchsia"]):not([class*="bg-lime"]):not([class*="bg-teal"]):not([class*="bg-sky"]):not([class*="bg-slate"]):not([class*="bg-zinc"]):not([class*="bg-neutral"]):not([class*="bg-stone"]):not([class*="bg-black"]):not([class*="bg-white\/"]) {
   background-color: #f9fafb;
 }
 
@@ -195,25 +198,10 @@ select {
   border-color: #e5e7eb;
 }
 
-/* Fix bg-\[\#0f1421\] and similar dark card colors */
-.bg-\[\#0f1421\] {
-  background-color: #f9fafb;
-}
-
 /* Fix text-white/50, text-white/60, text-white/30 */
 .text-white\/50 { color: #6b7280; }
 .text-white\/60 { color: #4b5563; }
 .text-white\/30 { color: #9ca3af; }
-
-/* Fix bg-\[\#131827\] for selects */
-.bg-\[\#131827\] {
-  background-color: #f3f4f6;
-}
-
-/* Fix bg-\[\#0b1020\] for selects */
-.bg-\[\#0b1020\] {
-  background-color: #f3f4f6;
-}
 
 /* Ensure proper text contrast in light mode tables */
 thead.text-gray-900.dark\:text-white\/40 {
@@ -292,7 +280,6 @@ td.text-gray-900.dark\:text-white\/30 {
 /* Fix bg-orange-500/20 */
 .bg-orange-500\/20 { background-color: #ffedd5; }
 .border-orange-500\/30 { border-color: #fed7aa; }
-.text-orange-400 { color: #ea580c; }
 
 /* Fix select option backgrounds */
 option {
@@ -308,273 +295,6 @@ option {
 /* Fix bg-gray-100 dark:bg-white/5 patterns */
 .bg-gray-100.dark\:bg-white\/5 {
   background-color: #f3f4f6;
-}
-
-/* Fix the main content bg */
-.bg-gray-50.dark\:bg-\[\\#07070d\] {
-  background-color: #f9fafb;
-}
-
-/* Fix text-gray-700 dark:text-white/80 */
-.text-gray-700.dark\:text-white\/80 {
-  color: #374151;
-}
-
-/* Fix text-gray-600 dark:text-white/70 */
-.text-gray-600.dark\:text-white\/70 {
-  color: #4b5563;
-}
-
-/* Fix text-gray-500 dark:text-white/60 */
-.text-gray-500.dark\:text-white\/60 {
-  color: #6b7280;
-}
-
-/* Fix text-gray-400 dark:text-white/50 */
-.text-gray-400.dark\:text-white\/50 {
-  color: #9ca3af;
-}
-
-/* Fix placeholder colors */
-::placeholder {
-  color: #9ca3af;
-}
-
-/* Fix the autopilot tab gradient bg */
-.bg-gradient-to-r.from-cyan-600.to-blue-600 {
-  background-image: linear-gradient(to right, #0891b2, #2563eb);
-}
-
-/* Fix bg-white/20 in autopilot stats */
-.bg-white\/20 {
-  background-color: rgba(255, 255, 255, 0.2);
-}
-
-/* Ensure all text is readable in light mode */
-.text-cyan-100 { color: #67e8f9; }
-
-/* ========================================
-   PlatformAdmin Light Mode Fixes
-   Override dark-only color patterns
-   ======================================== */
-
-/* Fix text colors that are only defined for dark mode */
-.text-gray-900.dark\:text-gray-500,
-.text-gray-900.dark\:text-white\/50,
-.text-gray-900.dark\:text-white\/60,
-.text-gray-900.dark\:text-white\/40,
-.text-gray-900.dark\:text-white\/30 {
-  color: #374151;
-}
-
-/* Fix dark-only text colors */
-.dark\:text-white\/50,
-.dark\:text-white\/60,
-.dark\:text-white\/40,
-.dark\:text-white\/30 {
-  color: #6b7280;
-}
-
-/* Fix dark-only backgrounds */
-.dark\:bg-\[\\#0f111a\],
-.dark\:bg-\[\\#0f111a\]\/50,
-.dark\:bg-\[\\#121827\],
-.dark\:bg-\[\\#131827\],
-.dark\:bg-\[\\#0a0f1a\],
-.dark\:bg-\[\\#0b1020\] {
-  background-color: #f9fafb;
-}
-
-/* Fix dark-only borders */
-.dark\:border-white\/10,
-.dark\:border-white\/20,
-.dark\:border-white\/5 {
-  border-color: #e5e7eb;
-}
-
-/* Fix cyan/amber/emerald/rose text that's only dark-mode */
-.text-cyan-300 { color: #0891b2; }
-.text-cyan-200 { color: #0e7490; }
-.text-amber-300 { color: #d97706; }
-.text-emerald-300 { color: #059669; }
-.text-rose-300 { color: #e11d48; }
-.text-blue-300 { color: #2563eb; }
-.text-purple-300 { color: #9333ea; }
-
-/* Fix dark-only bg colors */
-.bg-cyan-500\/10,
-.bg-cyan-500\/15,
-.bg-cyan-500\/20,
-.bg-amber-500\/10,
-.bg-amber-500\/15,
-.bg-amber-500\/20,
-.bg-emerald-500\/10,
-.bg-emerald-500\/15,
-.bg-emerald-500\/20,
-.bg-rose-500\/10,
-.bg-rose-500\/15,
-.bg-rose-500\/20,
-.bg-blue-500\/10,
-.bg-blue-500\/15,
-.bg-blue-500\/20,
-.bg-purple-500\/10,
-.bg-purple-500\/15,
-.bg-purple-500\/20,
-.bg-gray-500\/10,
-.bg-gray-500\/15 {
-  background-color: rgba(0, 0, 0, 0.04);
-}
-
-/* Fix table hover in light mode */
-.hover\:bg-gray-100.dark\:bg-white\/5:hover {
-  background-color: #f3f4f6;
-}
-
-/* Fix select elements in light mode */
-select {
-  color: #111827;
-}
-
-/* Fix bg-white/10 and similar light overlays */
-.bg-white\/10,
-.bg-white\/5 {
-  background-color: rgba(0, 0, 0, 0.03);
-}
-
-/* Fix hover:bg-white/10, hover:bg-white/20 */
-.hover\:bg-white\/10:hover,
-.hover\:bg-white\/20:hover {
-  background-color: #f3f4f6;
-}
-
-/* Fix bg-black/30 (used in progress bars) */
-.bg-black\/30 {
-  background-color: rgba(0, 0, 0, 0.08);
-}
-
-/* Fix divide-white/10 */
-.divide-white\/10 > :not([hidden]) ~ :not([hidden]) {
-  border-color: #e5e7eb;
-}
-
-/* Fix bg-\[\#0f1421\] and similar dark card colors */
-.bg-\[\#0f1421\] {
-  background-color: #f9fafb;
-}
-
-/* Fix text-white/50, text-white/60, text-white/30 */
-.text-white\/50 { color: #6b7280; }
-.text-white\/60 { color: #4b5563; }
-.text-white\/30 { color: #9ca3af; }
-
-/* Fix bg-\[\#131827\] for selects */
-.bg-\[\#131827\] {
-  background-color: #f3f4f6;
-}
-
-/* Fix bg-\[\#0b1020\] for selects */
-.bg-\[\#0b1020\] {
-  background-color: #f3f4f6;
-}
-
-/* Ensure proper text contrast in light mode tables */
-thead.text-gray-900.dark\:text-white\/40 {
-  color: #374151;
-}
-
-/* Fix td text colors */
-td.text-gray-900.dark\:text-white\/50,
-td.text-gray-900.dark\:text-white\/60,
-td.text-gray-900.dark\:text-white\/30 {
-  color: #6b7280;
-}
-
-/* Fix bg-gradient-to-r from-cyan-500/10 etc */
-.bg-gradient-to-br.from-cyan-500\/10,
-.bg-gradient-to-br.from-blue-500\/10,
-.bg-gradient-to-br.from-amber-500\/10,
-.bg-gradient-to-br.from-purple-500\/10,
-.bg-gradient-to-br.from-gray-500\/10,
-.bg-gradient-to-br.from-emerald-500\/10,
-.bg-gradient-to-br.from-rose-500\/10 {
-  background-color: #f9fafb;
-}
-
-/* Fix border-white/10 */
-.border-white\/10 {
-  border-color: #e5e7eb;
-}
-
-/* Fix border-white/20 */
-.border-white\/20 {
-  border-color: #d1d5db;
-}
-
-/* Fix bg-white/10 for buttons */
-.bg-white\/10 {
-  background-color: #f3f4f6;
-}
-
-/* Fix hover states for buttons */
-.hover\:bg-white\/20:hover {
-  background-color: #e5e7eb;
-}
-
-/* Fix bg-rose-500/10, bg-emerald-500/10 etc for action buttons */
-.bg-rose-500\/10 { background-color: #fef2f2; }
-.bg-emerald-500\/10 { background-color: #f0fdf4; }
-.bg-cyan-500\/15 { background-color: #ecfeff; }
-.bg-cyan-500\/20 { background-color: #cffafe; }
-
-/* Fix border-rose-500/30, border-cyan-500/30 etc */
-.border-rose-500\/30 { border-color: #fecaca; }
-.border-cyan-500\/30 { border-color: #a5f3fc; }
-.border-emerald-500\/30 { border-color: #bbf7d0; }
-.border-amber-500\/30 { border-color: #fde68a; }
-
-/* Fix text-rose-400, text-emerald-400 etc */
-.text-rose-400 { color: #e11d48; }
-.text-emerald-400 { color: #059669; }
-.text-cyan-400 { color: #0891b2; }
-.text-amber-400 { color: #d97706; }
-.text-blue-400 { color: #2563eb; }
-.text-purple-400 { color: #9333ea; }
-.text-orange-400 { color: #ea580c; }
-
-/* Fix bg-rose-500/20 etc */
-.bg-rose-500\/20 { background-color: #fee2e2; }
-.bg-emerald-500\/20 { background-color: #dcfce7; }
-.bg-cyan-500\/20 { background-color: #cffafe; }
-
-/* Fix hover:bg-rose-500/20 etc */
-.hover\:bg-rose-500\/20:hover { background-color: #fecaca; }
-.hover\:bg-emerald-500\/20:hover { background-color: #bbf7d0; }
-.hover\:bg-cyan-500\/20:hover { background-color: #a5f3fc; }
-
-/* Fix bg-orange-500/20 */
-.bg-orange-500\/20 { background-color: #ffedd5; }
-.border-orange-500\/30 { border-color: #fed7aa; }
-.text-orange-400 { color: #ea580c; }
-
-/* Fix select option backgrounds */
-option {
-  background-color: #ffffff;
-  color: #111827;
-}
-
-/* Fix table row borders in light mode */
-.border-b.border-gray-100.dark\:border-white\/5 {
-  border-color: #f3f4f6;
-}
-
-/* Fix bg-gray-100 dark:bg-white/5 patterns */
-.bg-gray-100.dark\:bg-white\/5 {
-  background-color: #f3f4f6;
-}
-
-/* Fix the main content bg */
-.bg-gray-50.dark\:bg-\[\\#07070d\] {
-  background-color: #f9fafb;
 }
 
 /* Fix text-gray-700 dark:text-white/80 */

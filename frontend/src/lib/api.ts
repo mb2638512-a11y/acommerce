@@ -2,8 +2,8 @@ import axios from 'axios';
 import { auth, firebaseInitialized } from './firebase';
 import { USE_FIREBASE } from './config';
 
-// Prefer explicit env override; otherwise use same-origin /api
-// to avoid hardcoding localhost in production builds.
+// Use relative path for production (Vercel rewrites /api/* to backend)
+// Use localhost only for local development
 const getBaseURL = () => {
     if (import.meta.env.VITE_API_URL) {
         return import.meta.env.VITE_API_URL;
@@ -16,31 +16,27 @@ const getBaseURL = () => {
 
 const api = axios.create({
     baseURL: getBaseURL(),
+    timeout: 30000,
 });
 
 api.interceptors.request.use(async (config) => {
     try {
-        // Only try Firebase token if Firebase is properly configured and enabled
-        if (USE_FIREBASE && firebaseInitialized && auth) {
+        const localToken = localStorage.getItem('token');
+        if (localToken) {
+            config.headers.Authorization = `Bearer ${localToken}`;
+        } else if (USE_FIREBASE && firebaseInitialized && auth) {
             const user = auth.currentUser;
             if (user) {
                 try {
                     const token = await user.getIdToken();
                     config.headers.Authorization = `Bearer ${token}`;
-                    return config;
-                } catch (tokenError) {
-                    console.warn('API Interceptor: Failed to get Firebase token, falling back to local token:', tokenError);
+                } catch {
+                    // Firebase token fetch failed, continue without auth
                 }
             }
         }
-        // Fall back to local JWT token from localStorage
-        const localToken = localStorage.getItem('token');
-        if (localToken) {
-            config.headers.Authorization = `Bearer ${localToken}`;
-        }
     } catch (error) {
         console.error('API Interceptor: Error getting token', error);
-        // Still try to use local token as fallback
         const localToken = localStorage.getItem('token');
         if (localToken) {
             config.headers.Authorization = `Bearer ${localToken}`;
@@ -49,13 +45,13 @@ api.interceptors.request.use(async (config) => {
     return config;
 });
 
-// Add response interceptor to handle auth errors
-// Don't auto-clear tokens on 401 - let the app handle it gracefully
 api.interceptors.response.use(
     (response) => response,
     (error) => {
+        if (error.code === 'ERR_NETWORK') {
+            console.error('Network error: Cannot reach API server. Check if backend is running and CORS is configured.');
+        }
         if (error.response?.status === 401) {
-            // Only clear tokens if this is NOT a login/register endpoint
             const url = error.config?.url || '';
             const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/google') || url.includes('/auth/verify');
             if (!isAuthEndpoint) {

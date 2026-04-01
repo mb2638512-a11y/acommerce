@@ -307,11 +307,21 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.userId;
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-        const { name } = updateProfileSchema.parse(req.body);
+        const { name, avatar, banner, bio } = req.body as { name?: string; avatar?: string; banner?: string; bio?: string };
+
+        const updateData: Record<string, string> = {};
+        if (name !== undefined) updateData.name = name;
+        if (avatar !== undefined) updateData.avatar = avatar;
+        if (banner !== undefined) updateData.banner = banner;
+        if (bio !== undefined) updateData.bio = bio;
+
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).json({ error: 'No fields to update' });
+        }
 
         const user = await prisma.user.update({
             where: { id: userId },
-            data: { name }
+            data: updateData
         });
 
         res.json(await formatUserResponse(user));

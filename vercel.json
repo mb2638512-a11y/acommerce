@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://backend-mb2638512-9362s-projects.vercel.app/api/$1"
+      "destination": "https://backend-ivory-six-77.vercel.app/api/$1"
     },
     {
       "source": "/(.*)",

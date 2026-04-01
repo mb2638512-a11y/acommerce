@@ -414,7 +414,7 @@ export const AuthForm: React.FC = () => {
 				});
 				if (error) throw error;
 			} else {
-				showToast('Google sign-in is not available. Please use email sign-in.', 'info');
+				showToast('Google Sign-In requires Firebase configuration. Please use email sign-in or contact support.', 'info');
 			}
 		} catch (error: any) {
 			console.error('Google Auth Error:', error);

@@ -34,32 +34,27 @@ export const createDispute = async (req: AuthRequest, res: Response): Promise<vo
 
   const data = createDisputeSchema.parse(req.body);
 
-  // Verify order exists and belongs to user
-  const order = await prisma.order.findUnique({
-   where: { id: data.orderId },
-   select: {
-    id: true,
-    storeId: true,
-    customerEmail: true,
-    total: true,
-   },
-   include: {
-    store: {
-     select: { ownerId: true },
+   // Verify order exists and belongs to user
+   const order = await prisma.order.findUnique({
+    where: { id: data.orderId },
+    include: {
+     store: {
+      select: { ownerId: true },
+     },
     },
-   },
-  });
+   });
 
   if (!order) {
    res.status(404).json({ error: 'Order not found' });
    return;
   }
 
-  // Check if user is the buyer
-  if (req.user.email !== order.customerEmail) {
-   res.status(403).json({ error: 'You can only open disputes for your own orders' });
-   return;
-  }
+   // Check if user is the buyer
+   const userEmail = req.user?.email;
+   if (!userEmail || userEmail !== order.customerEmail) {
+    res.status(403).json({ error: 'You can only open disputes for your own orders' });
+    return;
+   }
 
   // Check if dispute already exists for this order
   const existingDispute = await prisma.dispute.findFirst({
@@ -138,11 +133,12 @@ export const getDispute = async (req: AuthRequest, res: Response): Promise<void>
    return;
   }
 
-  // Check if user is involved in the dispute
-  if (dispute.buyerId !== userId && dispute.sellerId !== userId && req.user.role !== 'ADMIN') {
-   res.status(403).json({ error: 'Not authorized to view this dispute' });
-   return;
-  }
+   // Check if user is involved in the dispute
+   const userRole = req.user?.role;
+   if (dispute.buyerId !== userId && dispute.sellerId !== userId && userRole !== 'admin') {
+    res.status(403).json({ error: 'Not authorized to view this dispute' });
+    return;
+   }
 
   // Get order details
   const order = await prisma.order.findUnique({
@@ -243,11 +239,12 @@ export const resolveDispute = async (req: AuthRequest, res: Response): Promise<v
    return;
   }
 
-  // Only admins can resolve disputes
-  if (req.user.role !== 'ADMIN') {
-   res.status(403).json({ error: 'Only administrators can resolve disputes' });
-   return;
-  }
+   // Only admins can resolve disputes
+   const userRole = req.user?.role;
+   if (userRole !== 'admin') {
+    res.status(403).json({ error: 'Only administrators can resolve disputes' });
+    return;
+   }
 
   const { id } = req.params;
   const data = resolveDisputeSchema.parse(req.body);
@@ -311,8 +308,9 @@ export const getSellerDisputes = async (req: AuthRequest, res: Response): Promis
   const { sellerId } = req.params;
   const { page = '1', limit = '10', status } = req.query;
 
-  // Users can only see their own disputes
-  if (sellerId !== userId && req.user.role !== 'ADMIN') {
+   // Users can only see their own disputes (seller)
+   const userRole = req.user?.role;
+   if (sellerId !== userId && userRole !== 'admin') {
    res.status(403).json({ error: 'Not authorized' });
    return;
   }
@@ -325,56 +323,51 @@ export const getSellerDisputes = async (req: AuthRequest, res: Response): Promis
    whereClause.status = status;
   }
 
-  const [disputes, total] = await Promise.all([
-   prisma.dispute.findMany({
-    where: whereClause,
-    orderBy: { createdAt: 'desc' },
-    skip: (pageNum - 1) * limitNum,
-    take: limitNum,
-    include: {
-     order: {
-      select: {
-       id: true,
-       total: true,
-       date: true,
-      },
+   const [disputes, total] = await Promise.all([
+    prisma.dispute.findMany({
+     where: whereClause,
+     orderBy: { createdAt: 'desc' },
+     skip: (pageNum - 1) * limitNum,
+     take: limitNum,
+     include: {
+      order: true,
      },
-    },
-   }),
-   prisma.dispute.count({ where: whereClause }),
-  ]);
+    }),
+    prisma.dispute.count({ where: whereClause }),
+   ]);
 
-  res.json({
-   disputes,
-   pagination: {
-    page: pageNum,
-    limit: limitNum,
-    total,
-    totalPages: Math.ceil(total / limitNum),
-   },
-  });
- } catch (error: any) {
-  console.error('Error in getSellerDisputes:', error);
-  res.status(500).json({ error: 'Failed to get seller disputes' });
- }
+   res.json({
+    disputes,
+    pagination: {
+     page: pageNum,
+     limit: limitNum,
+     total,
+     totalPages: Math.ceil(total / limitNum),
+    },
+   });
+  } catch (error: any) {
+   console.error('Error in getSellerDisputes:', error);
+   res.status(500).json({ error: 'Failed to get seller disputes' });
+  }
 };
 
 /**
  * Get buyer's disputes (GET /api/disputes/buyer/:buyerId)
  */
 export const getBuyerDisputes = async (req: AuthRequest, res: Response): Promise<void> => {
- try {
-  const userId = req.user?.userId;
-  if (!userId) {
-   res.status(401).json({ error: 'Unauthorized' });
-   return;
-  }
+  try {
+   const userId = req.user?.userId;
+   if (!userId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+   }
 
-  const { buyerId } = req.params;
-  const { page = '1', limit = '10', status } = req.query;
+   const { buyerId } = req.params;
+   const { page = '1', limit = '10', status } = req.query;
 
-  // Users can only see their own disputes
-  if (buyerId !== userId && req.user.role !== 'ADMIN') {
+   // Users can only see their own disputes (buyer)
+   const userRole = req.user?.role;
+   if (buyerId !== userId && userRole !== 'admin') {
    res.status(403).json({ error: 'Not authorized' });
    return;
   }
@@ -394,13 +387,7 @@ export const getBuyerDisputes = async (req: AuthRequest, res: Response): Promise
     skip: (pageNum - 1) * limitNum,
     take: limitNum,
     include: {
-     order: {
-      select: {
-       id: true,
-       total: true,
-       date: true,
-      },
-     },
+     order: true,
     },
    }),
    prisma.dispute.count({ where: whereClause }),
@@ -426,7 +413,7 @@ export const getBuyerDisputes = async (req: AuthRequest, res: Response): Promise
  */
 export const getAllDisputes = async (req: AuthRequest, res: Response): Promise<void> => {
  try {
-  if (req.user?.role !== 'ADMIN') {
+   if (req.user?.role !== 'admin') {
    res.status(403).json({ error: 'Admin access required' });
    return;
   }
@@ -451,13 +438,7 @@ export const getAllDisputes = async (req: AuthRequest, res: Response): Promise<v
     skip: (pageNum - 1) * limitNum,
     take: limitNum,
     include: {
-     order: {
-      select: {
-       id: true,
-       total: true,
-       date: true,
-      },
-     },
+     order: true,
     },
    }),
    prisma.dispute.count({ where: whereClause }),
@@ -473,7 +454,7 @@ export const getAllDisputes = async (req: AuthRequest, res: Response): Promise<v
    },
   });
  } catch (error: any) {
-  console.error('Error in getAllDisputes:', error);
-  res.status(500).json({ error: 'Failed to get all disputes' });
+  console.error('Error in getBuyerDisputes:', error);
+  res.status(500).json({ error: 'Failed to get buyer disputes' });
  }
 };

@@ -43,24 +43,27 @@ export const rateProduct = async (req: AuthRequest, res: Response): Promise<void
    return;
   }
 
-  // Check if user has purchased this product (for verified purchase badge)
-  let isVerifiedPurchase = false;
-  if (data.orderId) {
-   const order = await prisma.order.findFirst({
-    where: {
-     id: data.orderId,
-     customerEmail: req.user.email,
-    },
-    include: {
-     items: {
-      where: { productId: data.productId },
-     },
-    },
-   });
-   isVerifiedPurchase = !!order && order.items.length > 0;
-  }
+   // Check if user has purchased this product (for verified purchase badge)
+   let isVerifiedPurchase = false;
+   if (data.orderId) {
+    const userEmail = req.user?.email;
+    if (userEmail) {
+     const order = await prisma.order.findFirst({
+      where: {
+       id: data.orderId,
+       customerEmail: userEmail,
+      },
+      include: {
+       items: {
+        where: { productId: data.productId },
+       },
+      },
+     });
+      isVerifiedPurchase = !!order && order.items.length > 0;
+     }
+    }
 
-  // Get sellerId from product's store
+   // Get sellerId from product's store
   const store = await prisma.store.findUnique({
    where: { id: product.storeId },
    select: { ownerId: true },
@@ -98,9 +101,9 @@ export const rateProduct = async (req: AuthRequest, res: Response): Promise<void
      rating: data.rating,
      title: data.title,
      content: data.content,
-     isVerifiedPurchase,
-     customerName: req.user.name || 'Anonymous',
-    },
+      isVerifiedPurchase,
+      customerName: req.user?.email?.split('@')[0] || 'Anonymous',
+     },
    });
   }
 
@@ -313,16 +316,15 @@ export const getSellerRatings = async (req: AuthRequest, res: Response): Promise
   const pageNum = parseInt(page as string, 10);
   const limitNum = parseInt(limit as string, 10);
 
-  // Get seller info
-  const sellerAccount = await prisma.sellerAccount.findFirst({
-   where: { userId: sellerId },
-   select: { id: true, userId: true },
-   include: {
-    user: {
-     select: { name: true },
+   // Get seller info
+   const sellerAccount = await prisma.sellerAccount.findFirst({
+    where: { userId: sellerId },
+    include: {
+     user: {
+      select: { name: true },
+     },
     },
-   },
-  });
+   });
 
   if (!sellerAccount) {
    res.status(404).json({ error: 'Seller not found' });
@@ -440,15 +442,18 @@ export const createFeedback = async (req: AuthRequest, res: Response): Promise<v
     res.status(404).json({ error: 'Product not found' });
     return;
    }
-   // Check if user has purchased
-   const order = await prisma.order.findFirst({
-    where: {
-     customerEmail: req.user.email,
-     items: { some: { productId: data.targetId } },
-    },
-   });
-   isVerified = !!order;
-  } else if (data.type === 'SELLER') {
+    // Check if user has purchased
+    const userEmail = req.user?.email;
+    if (userEmail) {
+     const order = await prisma.order.findFirst({
+      where: {
+       customerEmail: userEmail,
+       items: { some: { productId: data.targetId } },
+      },
+     });
+      isVerified = !!order;
+     }
+   } else if (data.type === 'SELLER') {
    const seller = await prisma.sellerAccount.findFirst({
     where: { userId: data.targetId },
     select: { id: true },
@@ -563,7 +568,7 @@ export const respondToFeedback = async (req: AuthRequest, res: Response): Promis
    }
   }
 
-  if (req.user.role === 'ADMIN') {
+   if (req.user?.role === 'admin') {
    isAuthorized = true;
   }
 

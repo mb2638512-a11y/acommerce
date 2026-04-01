@@ -26,12 +26,12 @@ const DisputeCenter = lazy(() => import('./pages/DisputeCenter'));
 const FeedbackPage = lazy(() => import('./pages/FeedbackPage'));
 const Landing = lazy(() => import('./pages/Landing'));
 
-// A user can access the dashboard if they have a valid account (isVerified is not explicitly false)
-// KYC and payment verification are optional - they unlock additional features but shouldn't block access
+// Verification is optional - users can access all features without completing KYC/payment
+// The verification page is available for users who want to unlock additional features
 export const isFullyVerified = (user: User | null) => {
   if (!user) return false;
-  // Allow access as long as isVerified is not explicitly false
-  return user.isVerified !== false;
+  // All logged-in users can access the dashboard regardless of verification status
+  return true;
 };
 
 // --- Route Wrappers ---

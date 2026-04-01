@@ -152,6 +152,8 @@ model Order {
   items       OrderItem[]
   timeline    String?       // Serialized OrderTimelineEntry[]
   date        DateTime    @default(now())
+  
+  disputes    Dispute[]
 }
 
 model OrderItem {
@@ -474,6 +476,7 @@ model ModerationLog {
 model Dispute {
   id          String   @id @default(uuid())
   orderId     String
+  order       Order    @relation(fields: [orderId], references: [id])
   buyerId     String
   sellerId    String
   reason      String   // not_received, not_as_described, damaged, other

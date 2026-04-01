@@ -255,22 +255,21 @@ export async function calculateRankingScore(storeId: string): Promise<{
  */
 export async function updateTopSellers(limit: number = 100): Promise<void> {
  try {
-  // Get all stores with at least one follower or order
-  const stores = await prisma.store.findMany({
-   select: { id: true },
-   include: {
-    followers: { select: { id: true } },
-    orders: {
-     where: { status: { in: ['DELIVERED', 'SHIPPED'] } },
-     select: { total: true },
-    },
-    products: {
-     include: {
-      reviews: { select: { rating: true } },
+   // Get all stores with at least one follower or order
+   const stores = await prisma.store.findMany({
+    include: {
+     followers: { select: { id: true } },
+     orders: {
+      where: { status: { in: ['DELIVERED', 'SHIPPED'] } },
+      select: { total: true },
+     },
+     products: {
+      include: {
+       reviews: { select: { rating: true } },
+      },
      },
     },
-   },
-  });
+   });
 
   // Calculate scores for each store
   const storeScores = await Promise.all(

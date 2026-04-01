@@ -89,33 +89,52 @@ export const StoreCreationWizard: React.FC<StoreCreationWizardProps> = ({ isOpen
         }
     };
 
+    const handleNext = () => {
+        if (step === 1) {
+            if (!formData.name.trim()) {
+                showToast('Please enter a store name', 'error');
+                return;
+            }
+            if (!formData.niche.trim()) {
+                showToast('Please enter your store niche', 'error');
+                return;
+            }
+        }
+        setStep(s => Math.min(s + 1, 5));
+    };
+
     const handleLaunch = () => {
+        if (!formData.name.trim()) {
+            showToast('Please enter a store name', 'error');
+            return;
+        }
+
         const settings: StoreSettings = {
-            shippingFee: Number(formData.shippingFee),
-            taxRate: Number(formData.taxRate),
-            currency: formData.currency,
-            maintenanceMode: formData.maintenanceMode,
-            freeShippingThreshold: Number(formData.freeShippingThreshold),
-            salesGoal: Number(formData.salesGoal),
-            font: formData.font,
-            borderRadius: formData.borderRadius,
-            logoUrl: formData.logoUrl,
-            bannerUrl: formData.bannerUrl,
-            announcementBar: formData.announcementBar,
+            shippingFee: Number(formData.shippingFee) || 0,
+            taxRate: Number(formData.taxRate) || 0,
+            currency: formData.currency || 'USD',
+            maintenanceMode: formData.maintenanceMode || false,
+            freeShippingThreshold: Number(formData.freeShippingThreshold) || 100,
+            salesGoal: Number(formData.salesGoal) || 1000,
+            font: formData.font || 'sans',
+            borderRadius: formData.borderRadius || 'md',
+            logoUrl: formData.logoUrl || '',
+            bannerUrl: formData.bannerUrl || '',
+            announcementBar: formData.announcementBar || '',
             socialLinks: { 
-                facebook: formData.facebook, 
-                instagram: formData.instagram, 
-                twitter: formData.twitter, 
-                whatsapp: formData.whatsapp 
+                facebook: formData.facebook || '', 
+                instagram: formData.instagram || '', 
+                twitter: formData.twitter || '', 
+                whatsapp: formData.whatsapp || '' 
             }
         };
 
         createStoreMutation.mutate({
-            name: formData.name,
-            description: formData.description,
-            slug: formData.slug || formData.name.toLowerCase().replace(/\s+/g, '-'),
-            themeColor: formData.themeColor,
-            settings: settings
+            name: formData.name.trim(),
+            description: formData.description || '',
+            slug: formData.slug || undefined,
+            themeColor: formData.themeColor || 'indigo',
+            settings
         });
     };
 
@@ -366,7 +385,7 @@ export const StoreCreationWizard: React.FC<StoreCreationWizardProps> = ({ isOpen
                         
                         {step < 5 ? (
                             <button 
-                                onClick={() => setStep(s => s + 1)}
+                                onClick={handleNext}
                                 className="px-10 py-4 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-black rounded-3xl text-sm shadow-xl shadow-indigo-500/20 hover:scale-105 active:scale-95 transition-all"
                             >
                                 Continue Phase

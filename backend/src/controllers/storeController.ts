@@ -43,22 +43,19 @@ export const createStore = async (req: AuthRequest, res: Response) => {
 
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-        // Check user's store limit based on their plan
         const user = await prisma.user.findUnique({
             where: { id: userId },
             select: { role: true }
         });
 
-        // Get current store count
         const storeCount = await prisma.store.count({
             where: { ownerId: userId }
         });
 
-        // Define store limits per role/plan
         const maxStoresMap: Record<string, number> = {
-            admin: 999, // Admins can create unlimited stores
-            seller: 5,  // Sellers can create up to 5 stores
-            customer: 1 // Customers can create 1 store
+            admin: 999,
+            seller: 5,
+            customer: 1
         };
 
         const maxStores = maxStoresMap[user?.role || 'customer'];
@@ -74,33 +71,46 @@ export const createStore = async (req: AuthRequest, res: Response) => {
         }
 
         const finalSlug = await buildUniqueSlug(name, slug);
-        const baseSettings = withDefaultSubscription(settings);
+
+        const defaultSettings = {
+            shippingFee: 0,
+            taxRate: 0,
+            currency: 'USD',
+            maintenanceMode: false,
+            freeShippingThreshold: 100,
+            salesGoal: 1000,
+            font: 'sans',
+            borderRadius: 'md',
+            logoUrl: '',
+            bannerUrl: '',
+            announcementBar: '',
+            socialLinks: {},
+            subscription: { tier: 'STARTER', status: 'ACTIVE' }
+        };
+
+        const mergedSettings = {
+            ...defaultSettings,
+            ...(typeof settings === 'object' ? settings : {})
+        };
 
         const store = await prisma.store.create({
             data: {
                 name,
                 slug: finalSlug,
-                description,
+                description: description || '',
                 themeColor: themeColor || 'indigo',
                 ownerId: userId,
-                settings: JSON.stringify({
-                    shippingFee: 0,
-                    taxRate: 0,
-                    currency: 'USD',
-                    maintenanceMode: false,
-                    freeShippingThreshold: 100,
-                    salesGoal: 1000,
-                    font: 'sans',
-                    borderRadius: 'md',
-                    socialLinks: {},
-                    ...baseSettings
-                })
+                settings: JSON.stringify(mergedSettings)
             }
         });
 
-        res.json(normalizeStore(store));
+        res.status(201).json(normalizeStore(store));
     } catch (error) {
-        res.status(400).json({ error: 'Failed to create store' });
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: error.errors[0]?.message || 'Invalid input' });
+        }
+        console.error('Create store error:', error);
+        res.status(500).json({ error: 'Failed to create store' });
     }
 };
 
@@ -110,11 +120,15 @@ export const getMyStores = async (req: AuthRequest, res: Response) => {
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
         const stores = await prisma.store.findMany({
-            where: { ownerId: userId }
+            where: { ownerId: userId },
+            include: {
+                products: { select: { id: true, name: true, price: true, images: true } }
+            }
         });
 
         res.json(stores.map(normalizeStore));
     } catch (error) {
+        console.error('Get my stores error:', error);
         res.status(500).json({ error: 'Server error' });
     }
 };

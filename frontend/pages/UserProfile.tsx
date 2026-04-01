@@ -146,27 +146,27 @@ export const UserProfile: React.FC<{ onNavigate: (p: string) => void }> = ({ onN
     const handleImageUpload = useCallback(async (file: File, type: 'avatar' | 'banner') => {
         setUploadingImage(type);
         try {
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('upload_preset', 'acommerce');
-            const res = await fetch(`https://api.cloudinary.com/v1_1/acommerce/image/upload`, {
-                method: 'POST',
-                body: formData,
-            });
-            const data = await res.json();
-            if (data.secure_url) {
+            // Convert image to base64 data URL for direct storage
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+                const base64Data = reader.result as string;
                 if (type === 'avatar') {
-                    setAvatarUrl(data.secure_url);
-                    updateProfileMutation.mutate({ avatar: data.secure_url });
+                    setAvatarUrl(base64Data);
+                    updateProfileMutation.mutate({ avatar: base64Data });
                 } else {
-                    setBannerUrl(data.secure_url);
-                    updateProfileMutation.mutate({ banner: data.secure_url });
+                    setBannerUrl(base64Data);
+                    updateProfileMutation.mutate({ banner: base64Data });
                 }
                 showToast(`${type === 'avatar' ? 'Profile' : 'Banner'} image updated!`, 'success');
-            }
+                setUploadingImage(null);
+            };
+            reader.onerror = () => {
+                showToast('Failed to read image file', 'error');
+                setUploadingImage(null);
+            };
+            reader.readAsDataURL(file);
         } catch {
             showToast('Failed to upload image', 'error');
-        } finally {
             setUploadingImage(null);
         }
     }, []);

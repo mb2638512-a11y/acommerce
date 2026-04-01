@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
     X, Check, ChevronRight, ChevronLeft, Sparkles, Loader2, 
     Rocket, Palette, Globe, DollarSign, Megaphone, ShieldClose,
-    Layout, Type, Box, Heart, Zap
+    Layout, Type, Box, Heart, Zap, Link as LinkIcon, Facebook, Instagram, Twitter, Phone
 } from 'lucide-react';
 import api from '../src/lib/api';
 import { useToast } from '../context/ToastContext';
@@ -64,8 +64,9 @@ export const StoreCreationWizard: React.FC<StoreCreationWizardProps> = ({ isOpen
             showToast('Store launched successfully!', 'success');
             onClose();
         },
-        onError: () => {
-            showToast('Failed to launch store', 'error');
+        onError: (error: any) => {
+            const msg = error.response?.data?.error || error.response?.data?.message || 'Failed to launch store';
+            showToast(msg, 'error');
         }
     });
 
@@ -336,6 +337,34 @@ export const StoreCreationWizard: React.FC<StoreCreationWizardProps> = ({ isOpen
                                             <DollarSign size={16} className="absolute left-4 top-4.5 text-gray-400" />
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {step === 4 && (
+                            <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+                                <div className="text-center mb-2">
+                                    <LinkIcon size={32} className="mx-auto text-indigo-500 mb-2" />
+                                    <h3 className="font-bold text-gray-900 dark:text-white">Connect Your Social Media</h3>
+                                    <p className="text-sm text-gray-500 mt-1">Help customers find you across platforms</p>
+                                </div>
+                                <div className="space-y-4">
+                                    {[
+                                        { key: 'facebook', icon: Facebook, label: 'Facebook', placeholder: 'https://facebook.com/yourstore', color: 'text-blue-600' },
+                                        { key: 'instagram', icon: Instagram, label: 'Instagram', placeholder: 'https://instagram.com/yourstore', color: 'text-pink-600' },
+                                        { key: 'twitter', icon: Twitter, label: 'Twitter / X', placeholder: 'https://x.com/yourstore', color: 'text-gray-700 dark:text-gray-300' },
+                                        { key: 'whatsapp', icon: Phone, label: 'WhatsApp', placeholder: '+1234567890', color: 'text-green-600' },
+                                    ].map(({ key, icon: Icon, label, placeholder, color }) => (
+                                        <div key={key} className="flex items-center gap-3">
+                                            <Icon size={20} className={color} />
+                                            <input 
+                                                className="flex-1 p-3 rounded-xl bg-gray-50 dark:bg-white/5 border-none outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white text-sm"
+                                                placeholder={placeholder}
+                                                value={(formData as any)[key]}
+                                                onChange={e => updateField(key, e.target.value)}
+                                            />
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         )}

@@ -11,7 +11,7 @@ const createStoreSchema = z.object({
     description: z.string().optional(),
     slug: z.string().optional(),
     themeColor: z.string().optional(),
-    settings: z.record(z.any()).optional()
+    settings: z.any().optional()
 });
 
 const normalizeStore = <T extends { settings: unknown }>(store: T) => {
@@ -106,10 +106,13 @@ export const createStore = async (req: AuthRequest, res: Response) => {
 
         res.status(201).json(normalizeStore(store));
     } catch (error) {
+        console.error('Create store error:', error);
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.errors[0]?.message || 'Invalid input' });
         }
-        console.error('Create store error:', error);
+        if (error instanceof Error) {
+            return res.status(500).json({ error: error.message });
+        }
         res.status(500).json({ error: 'Failed to create store' });
     }
 };
@@ -128,8 +131,14 @@ export const getMyStores = async (req: AuthRequest, res: Response) => {
 
         res.json(stores.map(normalizeStore));
     } catch (error) {
-        console.error('Get my stores error:', error);
-        res.status(500).json({ error: 'Server error' });
+        console.error('Create store error:', error);
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: error.errors[0]?.message || 'Invalid input' });
+        }
+        if (error instanceof Error) {
+            return res.status(500).json({ error: error.message });
+        }
+        res.status(500).json({ error: 'Failed to create store' });
     }
 };
 

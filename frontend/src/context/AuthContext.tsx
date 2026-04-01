@@ -24,10 +24,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch { return null; }
     });
     const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
-    const [loading, setLoading] = useState(true);
+    // Start not loading - hydrate from localStorage immediately for instant render
+    // Auth state will be validated in background
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        const timeout = setTimeout(() => setLoading(false), 5000);
+        const timeout = setTimeout(() => setLoading(false), 1000);
 
         if (USE_FIREBASE && firebaseInitialized && firebaseAuth && firebaseApp) {
             try {

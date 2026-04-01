@@ -92,24 +92,11 @@ const SubscriptionWrapper: React.FC<{ user: User | null }> = ({ user: _user }) =
 
 const queryClient = new QueryClient();
 
-const RouteLoader: React.FC = () => (
-  <div className="min-h-screen bg-gray-50 dark:bg-[#07070d] flex items-center justify-center">
-    <div className="text-center">
-      <div className="inline-block w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Loading...</p>
-    </div>
-  </div>
-);
-
 const AppRoutes = () => {
   const { user, logout, loading } = useAuth();
 
-  if (loading) {
-    return <RouteLoader />;
-  }
-
   return (
-    <Suspense fallback={<RouteLoader />}>
+    <Suspense fallback={null}>
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={<Landing />} />

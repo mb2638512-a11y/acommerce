@@ -27,9 +27,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        const timeout = setTimeout(() => setLoading(false), 5000);
+
         if (USE_FIREBASE && firebaseInitialized && firebaseAuth && firebaseApp) {
             try {
                 const unsubscribe = onAuthStateChanged(firebaseAuth, async (fbUser) => {
+                    clearTimeout(timeout);
                     if (fbUser) {
                         try {
                             const { doc, getDoc, getFirestore } = await import("firebase/firestore");
@@ -46,7 +49,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                             localStorage.setItem("user", JSON.stringify(fallback));
                         }
                     } else {
-                        // Only clear if no JWT token (JWT auth is independent of Firebase)
                         if (!localStorage.getItem("token")) {
                             setUser(null);
                             localStorage.removeItem("user");
@@ -54,14 +56,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     }
                     setLoading(false);
                 });
-                return () => unsubscribe();
+                return () => { unsubscribe(); clearTimeout(timeout); };
             } catch {
+                clearTimeout(timeout);
                 const t = localStorage.getItem("token");
                 const u = localStorage.getItem("user");
                 if (t && u) { try { setUser(JSON.parse(u)); setToken(t); } catch {} }
                 setLoading(false);
             }
         } else if (!USE_FIREBASE) {
+            clearTimeout(timeout);
             const client = supabase;
             if (!client) {
                 const t = localStorage.getItem("token");
@@ -88,13 +92,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }
                 setLoading(false);
             });
-            return () => subscription.unsubscribe();
+            return () => { subscription.unsubscribe(); clearTimeout(timeout); };
         } else {
+            clearTimeout(timeout);
             const t = localStorage.getItem("token");
             const u = localStorage.getItem("user");
             if (t && u) { try { setUser(JSON.parse(u)); setToken(t); } catch {} }
             setLoading(false);
         }
+
+        return () => clearTimeout(timeout);
     }, []);
 
     const login = useCallback((newToken: string, userData: User) => {

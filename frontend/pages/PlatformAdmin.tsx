@@ -335,28 +335,29 @@ const PREMIUM_FEATURES: PremiumFeature[] = [
 const FEATURE_CATEGORIES: FeatureCategory[] = ['Marketing & Sales', 'Store Management', 'Advanced Commerce', 'Support & Branding', 'AI Advanced', 'Core Platform'];
 
 const AdminAreaChart: React.FC<{ data: RevenuePoint[] }> = ({ data }) => {
-  if (!data.length) return <div className="h-full flex items-center justify-center text-gray-900 dark:text-gray-500 dark:text-white/50">No analytics yet</div>;
+  if (!data.length) return <div className="h-full flex items-center justify-center text-gray-400 dark:text-white/50">No analytics yet</div>;
   return (
     <ResponsiveContainer width="100%" height="100%">
       <AreaChart data={data}>
         <defs>
           <linearGradient id="adminRevenueFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.6} />
-            <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
+            <stop offset="5%" stopColor="#0891b2" stopOpacity={0.4} />
+            <stop offset="95%" stopColor="#0891b2" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff1f" vertical={false} />
-        <XAxis dataKey="date" stroke="#ffffff70" fontSize={11} tickFormatter={(value) => value.slice(5)} />
-        <YAxis stroke="#ffffff70" fontSize={11} tickFormatter={(value) => `$${value}`} />
+        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+        <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} tickFormatter={(value) => value.slice(5)} />
+        <YAxis stroke="#9ca3af" fontSize={11} tickFormatter={(value) => `$${value}`} />
         <Tooltip
           contentStyle={{
-            backgroundColor: 'rgba(3, 7, 18, 0.9)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: '12px'
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            border: '1px solid #e5e7eb',
+            borderRadius: '12px',
+            color: '#111827'
           }}
           formatter={(value: any) => [`$${Number(value).toLocaleString()}`, 'Revenue']}
         />
-        <Area type="monotone" dataKey="revenue" stroke="#38bdf8" strokeWidth={3} fill="url(#adminRevenueFill)" />
+        <Area type="monotone" dataKey="revenue" stroke="#0891b2" strokeWidth={3} fill="url(#adminRevenueFill)" />
       </AreaChart>
     </ResponsiveContainer>
   );
@@ -378,15 +379,15 @@ const planBadgeClass = (tier: PlanTier) => {
 };
 
 const controlStatusClass = (status: ControlStatus) => {
-  if (status === 'Active') return 'text-emerald-300 border-emerald-400/40 bg-emerald-500/10';
-  if (status === 'Pilot') return 'text-cyan-300 border-cyan-400/40 bg-cyan-500/10';
-  return 'text-amber-300 border-amber-400/40 bg-amber-500/10';
+  if (status === 'Active') return 'text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-400/40 bg-emerald-100 dark:bg-emerald-500/10';
+  if (status === 'Pilot') return 'text-cyan-700 dark:text-cyan-300 border-cyan-300 dark:border-cyan-400/40 bg-cyan-100 dark:bg-cyan-500/10';
+  return 'text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-400/40 bg-amber-100 dark:bg-amber-500/10';
 };
 
 const controlRiskClass = (risk: ControlRisk) => {
-  if (risk === 'High') return 'text-rose-300 border-rose-400/40 bg-rose-500/10';
-  if (risk === 'Medium') return 'text-amber-300 border-amber-400/40 bg-amber-500/10';
-  return 'text-emerald-300 border-emerald-400/40 bg-emerald-500/10';
+  if (risk === 'High') return 'text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-400/40 bg-rose-100 dark:bg-rose-500/10';
+  if (risk === 'Medium') return 'text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-400/40 bg-amber-100 dark:bg-amber-500/10';
+  return 'text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-400/40 bg-emerald-100 dark:bg-emerald-500/10';
 };
 
 const toDateLabel = (iso: string) => new Date(iso).toLocaleDateString();
@@ -757,8 +758,8 @@ export const PlatformAdmin: React.FC<PlatformAdminProps> = ({ onNavigate, onLogo
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-[#07070d] text-gray-900 dark:text-white flex items-center justify-center">
         <div className="text-center">
-          <Shield className="mx-auto mb-3 animate-pulse" />
-          <p className="font-bold tracking-wider uppercase text-sm text-gray-900 dark:text-gray-600 dark:text-white/70">Loading Global Control Center</p>
+          <Shield className="mx-auto mb-3 animate-pulse text-gray-400 dark:text-white/70" />
+          <p className="font-bold tracking-wider uppercase text-sm text-gray-500 dark:text-white/70">Loading Global Control Center</p>
         </div>
       </div>
     );
@@ -768,8 +769,19 @@ export const PlatformAdmin: React.FC<PlatformAdminProps> = ({ onNavigate, onLogo
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-[#07070d] text-gray-900 dark:text-white flex items-center justify-center">
         <div className="text-center">
-          <Shield className="mx-auto mb-3 text-rose-300" />
-          <p className="font-bold tracking-wider uppercase text-sm text-rose-200">Failed to load platform data</p>
+          <Shield className="mx-auto mb-3 text-rose-500" />
+          <p className="font-bold tracking-wider uppercase text-sm text-rose-500">Failed to load platform data</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isAdminDataError) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-[#07070d] text-gray-900 dark:text-white flex items-center justify-center">
+        <div className="text-center">
+          <Shield className="mx-auto mb-3 text-rose-500" />
+          <p className="font-bold tracking-wider uppercase text-sm text-rose-500">Failed to load platform data</p>
         </div>
       </div>
     );
@@ -937,21 +949,21 @@ export const PlatformAdmin: React.FC<PlatformAdminProps> = ({ onNavigate, onLogo
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-[#07070d] text-gray-900 dark:text-white flex">
       <aside
-        className={`fixed lg:relative inset-y-0 left-0 z-50 w-80 bg-white dark:bg-[#0f111a]/95 backdrop-blur-xl border-r border-gray-200 dark:border-white/10 transform transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        className={`fixed lg:relative inset-y-0 left-0 z-50 w-72 bg-white dark:bg-[#0f111a]/95 backdrop-blur-xl border-r border-gray-200 dark:border-white/10 transform transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
           }`}
       >
-        <div className="px-6 py-6 border-b border-gray-200 dark:border-white/10 flex items-center justify-between">
+        <div className="px-4 py-4 border-b border-gray-200 dark:border-white/10 flex items-center justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.25em] text-cyan-300 font-black">Global Owner Console</p>
-            <h1 className="text-xl font-black">ACommerce Prime Orbit</h1>
-            <p className="text-[11px] text-gray-900 dark:text-gray-500 dark:text-white/50 mt-1">{controlSummary.total} governance controls live</p>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-600 dark:text-cyan-300 font-black">Global Owner Console</p>
+            <h1 className="text-lg font-black text-gray-900 dark:text-white">ACommerce Prime Orbit</h1>
+            <p className="text-[10px] text-gray-500 dark:text-white/50 mt-0.5">{controlSummary.total} governance controls live</p>
           </div>
-          <button className="lg:hidden text-gray-900 dark:text-gray-600 dark:text-white/70" onClick={() => setIsSidebarOpen(false)}>
+          <button className="lg:hidden text-gray-500 dark:text-white/70" onClick={() => setIsSidebarOpen(false)}>
             <X size={18} />
           </button>
         </div>
 
-        <nav className="p-4 space-y-2">
+        <nav className="p-3 space-y-1 max-h-[calc(100vh-200px)] overflow-y-auto">
           {menuItems.map((item) => {
             const isActive = activeTab === item.id;
             return (
@@ -961,7 +973,7 @@ export const PlatformAdmin: React.FC<PlatformAdminProps> = ({ onNavigate, onLogo
                   setActiveTab(item.id);
                   setIsSidebarOpen(false);
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${isActive ? 'bg-cyan-500/20 border border-cyan-400/30 text-cyan-200' : 'text-gray-900 dark:text-gray-600 dark:text-white/70 hover:bg-gray-100 dark:hover:bg-white/10'
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${isActive ? 'bg-cyan-50 dark:bg-cyan-500/20 border border-cyan-200 dark:border-cyan-400/30 text-cyan-700 dark:text-cyan-200' : 'text-gray-700 dark:text-white/70 hover:bg-gray-100 dark:hover:bg-white/10'
                   }`}
               >
                 <item.icon size={16} />
@@ -971,10 +983,10 @@ export const PlatformAdmin: React.FC<PlatformAdminProps> = ({ onNavigate, onLogo
           })}
         </nav>
 
-        <div className="p-4 border-t border-gray-200 dark:border-white/10 mt-auto">
+        <div className="p-3 border-t border-gray-200 dark:border-white/10 mt-auto">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 py-3 text-sm font-bold text-rose-300 hover:bg-rose-500/20"
+            className="w-full flex items-center justify-center gap-2 rounded-xl border border-rose-300 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 py-2.5 text-sm font-bold text-rose-600 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-500/20"
           >
             <LogOut size={16} />
             Logout
@@ -983,71 +995,71 @@ export const PlatformAdmin: React.FC<PlatformAdminProps> = ({ onNavigate, onLogo
       </aside>
 
       <main className="flex-1 min-w-0">
-        <header className="sticky top-0 z-30 bg-gray-50 dark:bg-[#07070d]/90 backdrop-blur-lg border-b border-gray-200 dark:border-white/10 px-4 md:px-8 h-16 flex items-center justify-between gap-3">
-          <button className="lg:hidden text-gray-900 dark:text-gray-700 dark:text-white/80" onClick={() => setIsSidebarOpen(true)}>
+        <header className="sticky top-0 z-30 bg-white/90 dark:bg-[#07070d]/90 backdrop-blur-lg border-b border-gray-200 dark:border-white/10 px-4 md:px-6 h-14 flex items-center justify-between gap-3">
+          <button className="lg:hidden text-gray-600 dark:text-white/80" onClick={() => setIsSidebarOpen(true)}>
             <Menu size={20} />
           </button>
           <div className="relative w-full max-w-xl">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-900 dark:text-gray-500 dark:text-white/50" />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/50" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search controls, users, stores, orders, products..."
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white dark:bg-[#131827] border border-gray-200 dark:border-white/10 text-sm outline-none focus:border-cyan-400/50"
+              className="w-full pl-9 pr-4 py-2 rounded-xl bg-gray-100 dark:bg-[#131827] border border-gray-200 dark:border-white/10 text-sm text-gray-900 dark:text-white outline-none focus:border-cyan-400/50 placeholder-gray-400 dark:placeholder-gray-500"
             />
           </div>
-          <div className="text-xs text-gray-900 dark:text-gray-500 dark:text-white/60 uppercase tracking-widest font-bold hidden md:flex items-center gap-3">
+          <div className="text-xs text-gray-500 dark:text-white/60 uppercase tracking-widest font-bold hidden md:flex items-center gap-3">
             <ThemeToggle />
-            <span className="text-emerald-300">{safeStats.systemHealth}</span>
-            <span className="text-cyan-300">{controlSummary.total} Controls</span>
+            <span className="text-emerald-600 dark:text-emerald-300">{safeStats.systemHealth}</span>
+            <span className="text-cyan-600 dark:text-cyan-300">{controlSummary.total} Controls</span>
           </div>
         </header>
 
-        <div className="p-4 md:p-8 space-y-8">
+        <div className="p-4 md:p-6 space-y-6">
           {activeTab === 'overview' && (
-            <div className="space-y-6 lg:space-y-8 animate-fade-in">
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4 lg:gap-6">
+            <div className="space-y-6 animate-fade-in">
+              <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-6 gap-3 lg:gap-4">
                 {[
-                  { label: 'GMV', value: formatCurrency(safeStats.totalRevenue), icon: DollarSign, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20' },
-                  { label: 'Stores', value: safeStats.totalStores.toLocaleString(), icon: StoreIcon, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
-                  { label: 'Orders', value: safeStats.totalOrders.toLocaleString(), icon: Receipt, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
-                  { label: 'Users', value: safeStats.totalUsers.toLocaleString(), icon: Users, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
-                  { label: 'Premium Stores', value: safeStats.premiumStores.toLocaleString(), icon: Crown, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
-                  { label: 'Controls', value: controlSummary.total.toLocaleString(), icon: Shield, color: 'text-blue-300', bg: 'bg-blue-500/10', border: 'border-blue-500/20' }
+                  { label: 'GMV', value: formatCurrency(safeStats.totalRevenue), icon: DollarSign, color: 'text-cyan-600 dark:text-cyan-400', bg: 'bg-cyan-50 dark:bg-cyan-500/10', border: 'border-cyan-200 dark:border-cyan-500/20' },
+                  { label: 'Stores', value: safeStats.totalStores.toLocaleString(), icon: StoreIcon, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-500/10', border: 'border-purple-200 dark:border-purple-500/20' },
+                  { label: 'Orders', value: safeStats.totalOrders.toLocaleString(), icon: Receipt, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-500/10', border: 'border-rose-200 dark:border-rose-500/20' },
+                  { label: 'Users', value: safeStats.totalUsers.toLocaleString(), icon: Users, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10', border: 'border-emerald-200 dark:border-emerald-500/20' },
+                  { label: 'Premium Stores', value: safeStats.premiumStores.toLocaleString(), icon: Crown, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10', border: 'border-amber-200 dark:border-amber-500/20' },
+                  { label: 'Controls', value: controlSummary.total.toLocaleString(), icon: Shield, color: 'text-blue-600 dark:text-blue-300', bg: 'bg-blue-50 dark:bg-blue-500/10', border: 'border-blue-200 dark:border-blue-500/20' }
                 ].map((stat, i) => (
-                  <div key={i} className={`p-5 rounded-2xl border ${stat.border} ${stat.bg} backdrop-blur-sm`}>
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="p-3 rounded-xl bg-gray-100 dark:bg-[#0a0f1a] shadow-inner">
-                        <stat.icon size={18} className={stat.color} />
+                  <div key={i} className={`p-4 rounded-xl border ${stat.border} ${stat.bg} backdrop-blur-sm`}>
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="p-2.5 rounded-lg bg-white/80 dark:bg-[#0a0f1a] shadow-inner">
+                        <stat.icon size={16} className={stat.color} />
                       </div>
                     </div>
-                    <p className="text-xs font-bold text-gray-900 dark:text-gray-500 dark:text-white/50 mb-1 uppercase tracking-wider">{stat.label}</p>
-                    <h3 className="text-2xl font-black tracking-tight">{stat.value}</h3>
+                    <p className="text-[10px] font-bold text-gray-500 dark:text-white/50 mb-0.5 uppercase tracking-wider">{stat.label}</p>
+                    <h3 className="text-lg font-black tracking-tight text-gray-900 dark:text-white">{stat.value}</h3>
                   </div>
                 ))}
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
-                <div className="lg:col-span-2 p-6 rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0f111a]/50">
-                  <h3 className="font-bold text-lg mb-6 flex items-center gap-2">
-                    <Activity className="text-cyan-400" size={18} /> Network Volume
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
+                <div className="lg:col-span-2 p-5 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0f111a]/50">
+                  <h3 className="font-bold text-base mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
+                    <Activity className="text-cyan-500 dark:text-cyan-400" size={18} /> Network Volume
                   </h3>
-                  <div className="h-72">
+                  <div className="h-64">
                     <AdminAreaChart data={revenueData} />
                   </div>
                 </div>
 
-                <div className="p-6 rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0f111a]/50 flex flex-col">
-                  <h3 className="font-bold text-lg mb-6 flex items-center gap-2">
-                    <Crown className="text-amber-400" size={18} /> Plan Distribution
+                <div className="p-5 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0f111a]/50 flex flex-col">
+                  <h3 className="font-bold text-base mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
+                    <Crown className="text-amber-500 dark:text-amber-400" size={18} /> Plan Distribution
                   </h3>
-                  <div className="flex-1 space-y-4">
+                  <div className="flex-1 space-y-3">
                     {PLAN_TIERS.map((tier) => (
-                      <div key={tier} className="flex items-center justify-between p-3 rounded-xl bg-gray-100 dark:bg-white/5 border border-gray-100 dark:border-white/5">
-                        <span className={`text-xs font-bold uppercase px-3 py-1 rounded-full ${planBadgeClass(tier)}`}>
+                      <div key={tier} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5">
+                        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${planBadgeClass(tier)}`}>
                           {tier}
                         </span>
-                        <span className="font-black text-lg">{safeStats.planDistribution[tier] || 0}</span>
+                        <span className="font-black text-base text-gray-900 dark:text-white">{safeStats.planDistribution[tier] || 0}</span>
                       </div>
                     ))}
                   </div>
